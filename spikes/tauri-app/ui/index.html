@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>wrc spike</title>
+  <style>
+    html, body {
+      margin: 0; height: 100%;
+      background: transparent; /* let mica show through */
+      font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+      color: #fff; overflow: hidden; user-select: none;
+    }
+    .wrap { padding: 16px; box-sizing: border-box; height: 100%; display: flex; flex-direction: column; }
+    .search {
+      background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.16);
+      border-radius: 10px; padding: 11px 14px; color: #fff; font-size: 16px; outline: none;
+    }
+    .search::placeholder { color: rgba(255,255,255,.45); }
+    .title { font-size: 11px; opacity: .6; margin: 16px 4px 8px; text-transform: uppercase; letter-spacing: .1em; }
+    .list { display: flex; flex-direction: column; gap: 6px; }
+    .item {
+      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.08);
+      border-radius: 8px; padding: 8px 12px; font-size: 13px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <input class="search" placeholder="Spike: press Alt+Space to hide/show…" />
+    <div class="title">clipboard (last 10)</div>
+    <div class="list" id="list"></div>
+  </div>
+  <script>
+    const list = document.getElementById('list');
+    const items = [];
+    if (window.__TAURI__) {
+      window.__TAURI__.event.listen('clipboard-text', (e) => {
+        items.unshift(String(e.payload));
+        if (items.length > 10) items.pop();
+        list.innerHTML = items.map(() => '<div class="item"></div>').join('');
+        [...list.children].forEach((el, i) => { el.textContent = items[i]; el.title = items[i]; });
+      });
+    } else {
+      list.textContent = 'window.__TAURI__ not available';
+    }
+  </script>
+</body>
+</html>
