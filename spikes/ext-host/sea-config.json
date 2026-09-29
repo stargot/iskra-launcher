@@ -1,0 +1,5 @@
+{
+  "main": "sea-entry.mjs",
+  "output": "sea-out/ext-host.blob",
+  "disableExperimentalSEAWarning": true
+}
