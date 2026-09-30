@@ -1,0 +1,22 @@
+[package]
+name = "iskra-sys"
+version = "0.1.0"
+edition = "2021"
+description = "Обёртки windows-rs для Iskra: активный монитор, автозапуск, fullscreen-детект. Единственное место с unsafe/WinAPI."
+
+[dependencies]
+windows = { workspace = true, features = [
+    # features спайка (spikes/tauri-app/Cargo.toml) — база для шагов 4/6:
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    # + мониторы и реестр (шаг 2):
+    "Win32_Graphics_Gdi",
+    "Win32_System_Registry",
+    # НАХОДКА (план не указывал): RegCreateKeyExW в windows 0.62.2 гейтится фичей
+    # Win32_Security (сигнатура ссылается на SECURITY_ATTRIBUTES).
+    "Win32_Security",
+] }

@@ -1,0 +1,337 @@
+/* Тема Iskra (шаг 5). [data-theme="dark"|"light"] на <html>.
+   Фон — полупрозрачный слой ПОД mica (риск 2: если mica при GPU-off даст чёрный
+   фон, в релизе уходим на непрозрачные --bg-overlay — план Б из плана фазы 1). */
+
+:root {
+  --radius-outer: 12px;
+  --radius-inner: 8px; /* concentric: outer = inner + padding */
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+html[data-theme="dark"],
+:root {
+  --bg-overlay: rgba(28, 28, 32, 0.42);
+  --text: #ececf1;
+  --text-muted: rgba(236, 236, 241, 0.55);
+  --surface: rgba(255, 255, 255, 0.06);
+  --surface-strong: rgba(255, 255, 255, 0.1);
+  --hover: rgba(255, 255, 255, 0.09);
+  --pressed: rgba(255, 255, 255, 0.04);
+  --accent: #f5c518;
+  --accent-text: #1c1c1e;
+  --danger: #ff7a7a;
+  --ok: #7ddba3;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --control-bg: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="light"] {
+  --bg-overlay: rgba(250, 250, 252, 0.5);
+  --text: #1d1d20;
+  --text-muted: rgba(29, 29, 32, 0.55);
+  --surface: rgba(255, 255, 255, 0.55);
+  --surface-strong: rgba(255, 255, 255, 0.8);
+  --hover: rgba(29, 29, 32, 0.06);
+  --pressed: rgba(29, 29, 32, 0.03);
+  --accent: #b98a00;
+  --accent-text: #ffffff;
+  --danger: #c92a2a;
+  --ok: #2b8a3e;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  --control-bg: rgba(29, 29, 32, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg-overlay);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+}
+
+/* --- Каркас лончера --- */
+
+.launcher {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 10px;
+  gap: 8px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-outer);
+  flex: none;
+}
+
+.brand {
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.topbar .spacer {
+  flex: 1;
+}
+
+.results {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.result-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-inner);
+  animation: skeleton-pulse 1.6s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 120ms);
+}
+
+.skeleton-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--surface-strong);
+  flex: none;
+}
+
+.skeleton-line {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-strong);
+  width: calc(38% + var(--i) * 6%);
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.statusbar {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+/* --- Кнопки и элементы управления --- */
+
+button {
+  font: inherit;
+  color: inherit;
+  background: var(--control-bg);
+  border: none;
+  border-radius: var(--radius-inner);
+  padding: 6px 14px;
+  min-height: 32px;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition:
+    background-color 0.12s ease,
+    transform 0.08s ease,
+    opacity 0.12s ease;
+}
+
+button:hover {
+  background: var(--hover);
+}
+
+button:active {
+  transform: scale(0.96);
+  background: var(--pressed);
+}
+
+button.icon-btn {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 8px;
+  color: var(--text-muted);
+  border-radius: 8px; /* concentric с topbar 12px − padding 4px */
+}
+
+button.primary {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+button.primary:hover {
+  opacity: 0.92;
+  background: var(--accent);
+}
+
+input[type="text"] {
+  font: inherit;
+  color: inherit;
+  background: var(--control-bg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-inner);
+  padding: 6px 10px;
+  min-height: 32px;
+  outline: none;
+  user-select: text;
+  transition:
+    border-color 0.12s ease,
+    background-color 0.12s ease;
+}
+
+input[type="text"]:focus {
+  border-color: var(--accent);
+  background: var(--surface-strong);
+}
+
+/* Сегментированный переключатель (тема) */
+
+.segmented {
+  display: inline-flex;
+  background: var(--control-bg);
+  border-radius: var(--radius-inner);
+  padding: 3px;
+  gap: 2px;
+}
+
+.segmented button {
+  min-width: 84px;
+  box-shadow: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px; /* concentric: 8px − 3px padding */
+}
+
+.segmented button.active {
+  background: var(--surface-strong);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Чекбокс-строка (автозапуск) */
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border-radius: var(--radius-inner);
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.check-row:hover {
+  background: var(--hover);
+}
+
+.check-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* --- Экран настроек --- */
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 10px;
+  gap: 8px;
+}
+
+.settings-scroll {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px;
+}
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius-outer);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.row .grow {
+  flex: 1;
+}
+
+.inline-note {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.inline-error {
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.inline-ok {
+  font-size: 12px;
+  color: var(--ok);
+}
+
+.kbd {
+  font-family: var(--font);
+  background: var(--control-bg);
+  border-radius: 6px;
+  padding: 1px 7px;
+  font-size: 12px;
+  font-weight: 600;
+}

@@ -1,0 +1,21 @@
+[package]
+name = "iskra"
+version = "0.1.0"
+edition = "2021"
+description = "Iskra launcher — Tauri 2 shell (Фаза 1)"
+
+[dependencies]
+tauri = { workspace = true, features = ["tray-icon", "image-png"] }
+tauri-plugin-global-shortcut = { workspace = true }
+window-vibrancy = { workspace = true }
+iskra-core = { workspace = true }
+iskra-sys = { workspace = true }
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[features]
+# Прод-сборка: встраивает ui/dist в бинарник (иначе tauri остаётся в dev-режиме
+# и грузит devUrl localhost:5173 — см. tauri/build.rs: dev = !custom-protocol).
+# build.cmd передаёт --features custom-protocol для release.
+custom-protocol = ["tauri/custom-protocol"]

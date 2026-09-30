@@ -1,0 +1,10 @@
+[package]
+name = "iskra-core"
+version = "0.1.0"
+edition = "2021"
+description = "Чистая логика Iskra: настройки, IPC-контракт, логирование. Без Tauri и WinAPI."
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+dirs = { workspace = true }

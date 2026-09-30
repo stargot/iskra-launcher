@@ -1,8 +1,19 @@
-/target
+# Rust
+/target/
+
+# Node / UI
 node_modules/
 dist/
+ui/node_modules/
+ui/dist/
+
+# Tauri codegen
+app/gen/
+spikes/tauri-app/gen/
+
+# Logs
 *.log
+
 .DS_Store
 spikes/ext-host/sea-out/
 spikes/tauri-app/target/
-spikes/tauri-app/gen/

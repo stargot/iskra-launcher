@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = ["crates/iskra-core", "crates/iskra-sys", "app"]
+
+[workspace.dependencies]
+# Внутренние крейты
+iskra-core = { path = "crates/iskra-core" }
+iskra-sys = { path = "crates/iskra-sys" }
+
+# Общие зависимости (версии из spikes/tauri-app/Cargo.lock — проверены фазой 0)
+serde = "1"
+serde_json = "1"
+dirs = "6"
+windows = "0.62.2"
+tauri = "2.11"
+tauri-build = "2"
+tauri-plugin-global-shortcut = "2"
+window-vibrancy = "=0.8.0"
+
+[profile.release]
+# Лончер: меньше бинарник — меньше резидентных страниц (критерий RAM ≤ 80 МБ).
+strip = true
