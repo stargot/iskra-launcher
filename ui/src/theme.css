@@ -83,9 +83,12 @@ body {
   flex: none;
 }
 
-.brand {
-  font-weight: 600;
-  letter-spacing: 0.2px;
+.brand-icon {
+  width: 22px;
+  height: 22px;
+  display: block;
+  flex-shrink: 0;
+  user-select: none;
 }
 
 .hint {
@@ -102,45 +105,140 @@ body {
   margin: 0;
   padding: 4px;
   flex: 1;
-  overflow: hidden;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.result-skeleton {
+/* Тонкий скроллбар в списке результатов (шаг 5). */
+.results::-webkit-scrollbar {
+  width: 8px;
+}
+
+.results::-webkit-scrollbar-thumb {
+  background: var(--surface-strong);
+  border-radius: 4px;
+}
+
+.results::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* --- Строка результата (шаг 5): hover/selected, иконка 20×20 --- */
+
+.result {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border-radius: var(--radius-inner);
-  animation: skeleton-pulse 1.6s ease-in-out infinite;
-  animation-delay: calc(var(--i) * 120ms);
+  cursor: pointer;
+  transition: background-color 0.08s ease;
 }
 
-.skeleton-icon {
+.result:hover {
+  background: var(--hover);
+}
+
+.result.selected {
+  background: var(--surface-strong);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.result-icon {
   width: 20px;
   height: 20px;
-  border-radius: 6px;
-  background: var(--surface-strong);
+  border-radius: 5px;
+  object-fit: contain;
   flex: none;
 }
 
-.skeleton-line {
-  height: 8px;
-  border-radius: 4px;
+/* Буквенная заглушка, пока PNG нет в кэше (первый показ приложения). */
+.result-icon-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--surface-strong);
-  width: calc(38% + var(--i) * 6%);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
 }
 
-@keyframes skeleton-pulse {
-  0%,
-  100% {
-    opacity: 0.45;
-  }
-  50% {
-    opacity: 1;
-  }
+.result-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.result-title {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-subtitle {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-badge {
+  flex: none;
+  font-size: 10px;
+  color: var(--text-muted);
+  border: 1px solid var(--surface-strong);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.result-empty {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 18px 10px;
+}
+
+/* --- Строка поиска (шаг 5): единый стиль с существующим --- */
+
+.searchbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-outer);
+  background: var(--surface);
+  flex: none;
+}
+
+.searchbar .search-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 30px;
+  font-size: 15px;
+  background: transparent;
+  border: none;
+  padding: 4px 2px;
+}
+
+.searchbar .search-input:focus {
+  border: none;
+  background: transparent;
+}
+
+.searchbar .icon-btn {
+  border-radius: 8px; /* concentric с searchbar 12px − padding */
 }
 
 .statusbar {

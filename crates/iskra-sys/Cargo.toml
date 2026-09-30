@@ -19,4 +19,13 @@ windows = { workspace = true, features = [
     # НАХОДКА (план не указывал): RegCreateKeyExW в windows 0.62.2 гейтится фичей
     # Win32_Security (сигнатура ссылается на SECURITY_ATTRIBUTES).
     "Win32_Security",
+    # + шаг 3 Фазы 2 (shell / иконки / питание):
+    "Win32_UI_Shell",          # ShellExecute(W), SHEmptyRecycleBinW, IShellItemImageFactory
+    "Win32_System_Com",        # CoInitializeEx (иконки — STA), IBindCtx
+    "Win32_System_Threading",  # OpenProcess/TerminateProcess/GetProcessId, OpenProcessToken
+    "Win32_System_Shutdown",   # ExitWindowsEx, LockWorkStation, EWX_*/SHTDN_REASON_*
+    "Win32_System_Power",      # SetSuspendState (PowrProf)
 ] }
+
+# Шаг 3: HBITMAP → PNG (D7). Версия/фичи (png, без default) — в [workspace.dependencies].
+image = { workspace = true }

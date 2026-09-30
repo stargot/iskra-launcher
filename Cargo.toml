@@ -17,6 +17,15 @@ tauri-build = "2"
 tauri-plugin-global-shortcut = "2"
 window-vibrancy = "=0.8.0"
 
+# Фаза 2, шаг 0 (пре-чек сборкой под vcvars64, 2026-09-30).
+# rusqlite 0.39 — максимум, поддерживаемый refinery-core 0.9 (req ">=0.23, <=0.39");
+# 0.40 развёл бы две копии rusqlite и сломал передачу Connection в refinery.
+rusqlite = "0.39"
+refinery = { version = "0.9", default-features = false, features = ["rusqlite"] }
+parselnk = "0.1"
+meval = "0.2"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
 [profile.release]
 # Лончер: меньше бинарник — меньше резидентных страниц (критерий RAM ≤ 80 МБ).
 strip = true

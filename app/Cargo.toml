@@ -5,11 +5,21 @@ edition = "2021"
 description = "Iskra launcher — Tauri 2 shell (Фаза 1)"
 
 [dependencies]
-tauri = { workspace = true, features = ["tray-icon", "image-png"] }
+tauri = { workspace = true, features = ["tray-icon", "image-png", "protocol-asset"] }
 tauri-plugin-global-shortcut = { workspace = true }
 window-vibrancy = { workspace = true }
 iskra-core = { workspace = true }
 iskra-sys = { workspace = true }
+serde_json = { workspace = true }
+
+# Шаг 4 Фазы 2: запись в буфер обмена (ItemAction::CopyText) на стороне app —
+# iskra-sys по условию шага не расширялся. Только WinAPI-фичи для clipboard.rs.
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+] }
 
 [build-dependencies]
 tauri-build = { workspace = true }

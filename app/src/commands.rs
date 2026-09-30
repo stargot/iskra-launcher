@@ -3,6 +3,7 @@
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use iskra_core::ipc::{IndexStatus, SearchError, SearchResponse};
 use iskra_core::logging;
 use iskra_core::{
     RuntimeInfo, Settings, SettingsError, SettingsPatch, EVENT_SETTINGS_CHANGED,
@@ -19,6 +20,41 @@ pub fn get_settings(state: State<'_, AppState>) -> Settings {
 #[tauri::command]
 pub fn get_runtime_info(state: State<'_, AppState>) -> RuntimeInfo {
     state.hotkey.runtime_info()
+}
+
+// --- Фаза 2, шаг 4: поиск (тонкие обёртки; логика — SearchService) ---
+
+/// Поиск: быстрые провайдеры синхронно, «медленные» (файлы) — событием
+/// `search://updated` (D8). Пустой запрос — recents.
+#[tauri::command]
+pub fn search(state: State<'_, AppState>, q: String) -> SearchResponse {
+    state.search.search(&q)
+}
+
+/// Исполнить элемент выдачи: usage++ и ItemAction через iskra-sys/буфер обмена.
+#[tauri::command]
+pub fn run_item(state: State<'_, AppState>, id: String) -> Result<(), SearchError> {
+    state.search.run_item(&id)
+}
+
+/// Последний статус фонового индексатора.
+#[tauri::command]
+pub fn get_index_status(state: State<'_, AppState>) -> IndexStatus {
+    state.search.index_status()
+}
+
+/// Полный рескан в фоновом воркере (не блокирует UI).
+#[tauri::command]
+pub fn reindex(state: State<'_, AppState>) {
+    state.search.request_reindex();
+}
+
+/// Скрыть окно лончера (Esc в UI; минорное расширение контракта шага 4).
+#[tauri::command]
+pub fn hide_window(app: AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.hide();
+    }
 }
 
 /// Применить патч настроек: хоткей → remap (при InvalidHotkey/HotkeyBusy ничего

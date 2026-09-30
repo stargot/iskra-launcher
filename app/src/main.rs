@@ -1,16 +1,19 @@
 // Iskra, Фаза 1, шаг 4: app-сервисы — хоткей (HotkeyService), окно на активном
 // мониторе + hide-on-blur, трей, команды контракта. Склейка: builder + setup.
 // Порты из spikes/tauri-app: mica, hide-on-blur, фолбэк-хоткей, bench.
+// Фаза 2, шаг 4: SearchService (поиск/индексация/иконки) + команды поиска.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod bench;
+mod clipboard;
 mod commands;
 mod hotkey;
+mod search_service;
 mod tray;
 mod window;
 
 use std::sync::mpsc::{channel, Sender};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use tauri::Manager;
 
@@ -25,6 +28,8 @@ pub struct AppState {
     pub hotkey: hotkey::HotkeyService,
     /// Канал латентности bench-режима; Some только при запуске с `--bench N`.
     pub bench_tx: Option<Sender<u64>>,
+    /// Поиск: агрегатор + файлы + иконки + фоновый индексатор (шаг 4 Фазы 2).
+    pub search: Arc<search_service::SearchService>,
 }
 
 fn main() {
@@ -40,6 +45,16 @@ fn main() {
     }
 
     let bench_n = bench::parse_bench_arg();
+    // `--bench-search N`: микробенчмарк ядра поиска (шаг 6) — Tauri не нужен,
+    // печать p95 в stdout + лог; приложение завершается с кодом 0.
+    if let Some(n) = bench::parse_bench_search_arg() {
+        logging::info(&format!(
+            "startup pid={} bench-search={n}",
+            std::process::id()
+        ));
+        bench::run_bench_search(n);
+        return;
+    }
     let (bench_tx, bench_rx) = channel::<u64>();
     let settings = Settings::load();
     logging::info(&format!(
@@ -71,7 +86,12 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
             commands::update_settings,
-            commands::get_runtime_info
+            commands::get_runtime_info,
+            commands::search,
+            commands::run_item,
+            commands::get_index_status,
+            commands::reindex,
+            commands::hide_window
         ])
         .setup(move |app| {
             let win = app.get_webview_window("main").expect("main window");
@@ -85,10 +105,15 @@ fn main() {
             }
 
             // Состояние ДО регистрации хоткеев (обработчик читает AppState).
+            // SearchService: БД + провайдеры + иконки + фоновый индекс-воркер
+            // (старт скана и события index://progress — сразу из setup).
+            let sink = Arc::new(search_service::TauriSink(app.handle().clone()));
+            let search = search_service::SearchService::new(sink);
             app.manage(AppState {
                 settings: Mutex::new(settings.clone()),
                 hotkey: hotkey::HotkeyService::new(),
                 bench_tx: bench_n.map(|_| bench_tx),
+                search,
             });
 
             // Хоткей из настроек (+ фолбэк при занятом; bench-хоткей при --bench).

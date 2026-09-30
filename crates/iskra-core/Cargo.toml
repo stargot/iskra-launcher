@@ -8,3 +8,16 @@ description = "Чистая логика Iskra: настройки, IPC-конт
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 dirs = { workspace = true }
+
+# --- Фаза 2, шаг 0 (решения D2–D5, D7): версии проверены сборкой под vcvars64 ---
+# D2: bundled SQLite (без системной sqlite3), FTS5 проверен тестом (search/mod.rs).
+rusqlite = { workspace = true, features = ["bundled"] }
+# D3: миграции embedded поверх rusqlite (реальное применение — шаг 2, db.rs).
+refinery = { workspace = true }
+# D4: парсинг .lnk (реальное использование — шаг 2, apps.rs; здесь — пре-чек сборки).
+parselnk = { workspace = true }
+# D5: вычисление выражений калькулятора (calc.rs).
+meval = { workspace = true }
+# D7: PNG-кодирование иконок (реальное использование — шаг 3, iskra-sys/icons.rs;
+# здесь — пре-чек сборки + линковки, тест в search/mod.rs).
+image = { workspace = true }
