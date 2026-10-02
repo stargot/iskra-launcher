@@ -130,3 +130,13 @@ ui/src/theme.css                    # + карточка размера, сти�
 **Файлы:** `crates/iskra-core/src/settings.rs`, `app/src/window.rs`, `app/src/main.rs`, `app/src/commands.rs`, `ui/src/ipc/types.ts`, `ui/src/components/{SettingsView,App→App.tsx,ResultList}.tsx`, `ui/src/theme.css`; новые: `ui/src/components/SnippetsView.tsx`, `ui/src/lib/highlight.ts`. Не трогаются: `snippets.rs`, `SnippetsProvider`, миграции, IPC-команды.
 
 **Итог работы:** изучены окно/настройки/IPC/UI/сниппеты проекта, принятые решения зафиксированы (D1–D10: serde-default enum, apply_mode с клампом по work area, hide-on-blur сохраняется в fullscreen — обоснование alwaysOnTop; самописный хайлайтер без зависимостей с лимитом 100 КБ и без миграции БД), план на 2 прогона воркера с Done-критериями, рисками и ручным чек-листом составлен. Единственное отмеченное `ASSUMPTION` — программный `set_size` при `resizable: false` — проверяется воркером на шаге 2, план Б вписан. Файл плана не создавал (планищик read-only) — документ выше готов к записи в `docs/plans/2026-10-02-ui-window-and-snippets.md` дословно.
+
+---
+
+## Итоги (2026-10-02, машина №2)
+
+- Прогон 1 «размер окна»: коммит `6b24bba`. Reviewer: FIX REQUIRED (кламп rcMonitor → rcWork) — исправлено; warning по логированию set_fullscreen(false) — закрыт. Core-тесты 95 passed.
+- Прогон 2 «сниппеты-таб»: коммит `0486868`. Reviewer: APPROVE WITH COMMENTS; два warning (потеря dirty-черновика, удаление без подтверждения) — закрыты (confirm при уходе, двухклик-удаление). Бандл 245 → 251,74 КБ, тесты 95 passed.
+- RAM приёмка (spikes/ram-acceptance.ps1, private WS дерева, 3 сэмпла): normal **78,01/78,08/78,16 МБ — PASS (≤80)**; double 85,90/85,95/85,95 (+6); fullscreen 91,24/91,24/91,25 (+11). Превышение в 2×/fullscreen — рост поверхности композитинга WebView2, режимы opt-in, дефолт normal в бюджете (риск 5 плана сбылся, решение зафиксировано здесь).
+- Авто-верификация: cargo test -p iskra-core ✓, npm run build ✓ (40 модулей), build.cmd ✓.
+- Ручные пункты чек-листа §5 (пп. 1–11) — за пользователем.
