@@ -2,6 +2,16 @@
 //! (ProgramData + %APPDATA%) и рабочих столов, разбор .lnk крейтом parselnk
 //! (pure Rust, без COM). Битые .lnk — skip+лог, не падение (риск 2).
 //!
+//! Scoop-шимы (минифича): пакеты scoop не кладут ярлыки в Start Menu, поэтому
+//! сканируются каталоги шимов — %SCOOP%\shims (иначе %USERPROFILE%\scoop\shims)
+//! и глобальные %SCOOP_GLOBAL%\shims (иначе %ProgramData%\scoop\shims). По
+//! записи на `<имя>.exe`: target — сам шим (запуск корректен, аргументы
+//! пробрасываются), иконный источник — «реальный» exe из соседнего
+//! `<имя>.shim` (строка `path = "..."`, у него нормальная иконка); .shim нет/
+//! бит — источник сам шим (WARN). GUI-scoop-приложения, у которых ярлык в
+//! Start Menu есть, дедупятся в пользу ярлыка: ключ шима — разрешённый
+//! «реальный» exe, совпал с целью .lnk — шим пропускается.
+//!
 //! target берётся из LinkInfo.local_base_path (абсолютный путь), при его
 //! отсутствии — relative_path (напр. в рукотворных .lnk); нет ни того, ни
 //! другого (UWP/Store-заглушки) — пропуск, COM-вариант запланирован на фазу 3.
@@ -45,8 +55,9 @@ pub struct ScanReport {
     pub broken: usize,
 }
 
-/// Каталоги ярлыков по умолчанию: Start Menu (ProgramData + APPDATA),
-/// рабочий стол пользователя и общий рабочий стол (Public Desktop).
+/// Каталоги сканирования по умолчанию: Start Menu (ProgramData + APPDATA),
+/// рабочий стол пользователя, общий рабочий стол (Public Desktop) и scoop-шимы
+/// (в конце — при дедупе ярлык Start Menu побеждает шим).
 pub fn default_app_dirs() -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
     // ProgramData: Start Menu + Public Desktop
@@ -64,7 +75,58 @@ pub fn default_app_dirs() -> Vec<PathBuf> {
     if let Some(desktop) = dirs::desktop_dir() {
         roots.push(desktop);
     }
+    // Scoop-шимы — последними (см. scan_full_report: lnk-обход раньше шимов).
+    roots.extend(scoop_shim_dirs());
     roots.into_iter().filter(|p| p.is_dir()).collect()
+}
+
+/// Каталоги scoop-шимов: пользовательский `%SCOOP%\shims` (иначе
+/// `%USERPROFILE%\scoop\shims`) плюс глобальный `%SCOOP_GLOBAL%\shims`
+/// (иначе `%ProgramData%\scoop\shims`); несуществующие отброшены.
+pub fn scoop_shim_dirs() -> Vec<PathBuf> {
+    let home = std::env::var("USERPROFILE")
+        .ok()
+        .or_else(|| dirs::home_dir().map(|p| p.to_string_lossy().into_owned()));
+    scoop_shim_dirs_from(
+        std::env::var("SCOOP").ok(),
+        std::env::var("SCOOP_GLOBAL").ok(),
+        home,
+        std::env::var("ProgramData").ok(),
+    )
+    .into_iter()
+    .filter(|p| p.is_dir())
+    .collect()
+}
+
+/// Чистая сборка списка каталогов шимов из явных значений (без env и без
+/// проверки существования) — маппинг тестируется без мутации env, что в
+/// параллельных тестах недопустимо.
+fn scoop_shim_dirs_from(
+    scoop: Option<String>,
+    scoop_global: Option<String>,
+    home: Option<String>,
+    program_data: Option<String>,
+) -> Vec<PathBuf> {
+    let mut shim_dirs = Vec::new();
+    // Пользовательский корень: SCOOP перекрывает %USERPROFILE%\scoop.
+    match scoop {
+        Some(s) => shim_dirs.push(PathBuf::from(s).join("shims")),
+        None => {
+            if let Some(h) = home {
+                shim_dirs.push(PathBuf::from(h).join(r"scoop\shims"));
+            }
+        }
+    }
+    // Глобальный корень: SCOOP_GLOBAL перекрывает %ProgramData%\scoop.
+    match scoop_global {
+        Some(g) => shim_dirs.push(PathBuf::from(g).join("shims")),
+        None => {
+            if let Some(pd) = program_data {
+                shim_dirs.push(PathBuf::from(pd).join(r"scoop\shims"));
+            }
+        }
+    }
+    shim_dirs
 }
 
 /// Сканировать каталоги ярлыков (лог пропущенных — в runtime.log).
@@ -80,10 +142,25 @@ pub fn scan_apps(roots: &[PathBuf]) -> Vec<AppEntry> {
 /// `target.to_lowercase()` (совпадает с id элемента `apps:{target.lowercase()}`).
 /// Порядок корней значим: первый найденный .lnk выигрывает, а `default_app_dirs`
 /// кладёт ProgramData раньше пользовательских каталогов.
+///
+/// Корни из `scoop_shim_dirs()` (кладёт туда `default_app_dirs`) сканируются
+/// как scoop-шимы, остальные — как каталоги ярлыков; шимы всегда ПОСЛЕ
+/// .lnk-обхода (см. `scan_full_report`). tmp-корни тестов с реальной машиной
+/// не совпадают — детерминизм сохранён.
 pub fn scan_apps_report(roots: &[PathBuf]) -> ScanReport {
+    let scoop = scoop_shim_dirs();
+    let is_shim_root = |p: &Path| scoop.iter().any(|s| s == p);
+    let shim_roots: Vec<PathBuf> = roots.iter().filter(|p| is_shim_root(p)).cloned().collect();
+    let lnk_roots: Vec<PathBuf> = roots.iter().filter(|p| !is_shim_root(p)).cloned().collect();
+    scan_full_report(&lnk_roots, &shim_roots)
+}
+
+/// Полный скан с ЯВНЫМИ корнями: .lnk-каталоги + scoop-шимы (для тестов и
+/// диагностики без мутации env; прод-путь — `scan_apps_report(&default_app_dirs())`).
+pub fn scan_full_report(lnk_roots: &[PathBuf], shim_roots: &[PathBuf]) -> ScanReport {
     let mut report = ScanReport::default();
     let mut seen_targets: HashSet<String> = HashSet::new();
-    for root in roots {
+    for root in lnk_roots {
         // Обход корней ПО ОЧЕРЕДИ (не общий стек) — приоритет ранних корней.
         let mut stack: Vec<(PathBuf, usize)> =
             if root.is_dir() { vec![(root.clone(), 0)] } else { Vec::new() };
@@ -121,7 +198,101 @@ pub fn scan_apps_report(roots: &[PathBuf]) -> ScanReport {
             }
         }
     }
+    // Scoop-шимы — после .lnk-обхода. Ключ дедупа — разрешённый «реальный» exe
+    // (он же иконный источник; без .shim — сам шим): GUI-scoop-приложение с
+    // ярлыком Start Menu на тот же exe уже в списке — шим пропускается (lnk
+    // побеждает, у него нормальные имя/иконка); шимы между корнями схлопываются
+    // по тому же ключу (первый корень выигрывает, как .lnk выше).
+    let mut scoop_added = 0usize;
+    let mut scoop_skipped = 0usize;
+    for dir in shim_roots {
+        for app in scan_scoop_shims(dir) {
+            let key = app
+                .icon_source
+                .clone()
+                .unwrap_or_else(|| app.target.clone())
+                .to_lowercase();
+            if seen_targets.insert(key) {
+                report.apps.push(app);
+                scoop_added += 1;
+            } else {
+                scoop_skipped += 1;
+            }
+        }
+    }
+    if !shim_roots.is_empty() {
+        logging::info(&format!(
+            "apps: scoop shims added={scoop_added} dedup_skipped={scoop_skipped}"
+        ));
+    }
     report
+}
+
+/// Разобрать каталог scoop-шимов (без рекурсии): по записи на каждый
+/// `<имя>.exe`. target — путь шима (запуск шима корректен); иконный источник —
+/// «реальный» exe из соседнего `<имя>.shim`, при отсутствии/бите — сам шим.
+pub fn scan_scoop_shims(dir: &Path) -> Vec<AppEntry> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(e) => {
+            logging::warn(&format!("apps: недоступен каталог шимов {}: {e}", dir.display()));
+            return Vec::new();
+        }
+    };
+    let mut exes: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.is_file()
+                && p.extension().map(|e| e.eq_ignore_ascii_case("exe")).unwrap_or(false)
+        })
+        .collect();
+    exes.sort(); // порядок read_dir не гарантирован — детерминизм для тестов
+    exes.iter()
+        .filter_map(|exe| {
+            let title = exe.file_stem()?.to_string_lossy().into_owned();
+            let shim = exe.with_extension("shim"); // <имя>.shim рядом
+            let icon_source = match shim_path_line(&shim) {
+                Some(real) => Some(real),
+                None => {
+                    logging::warn(&format!(
+                        "apps: scoop: {} без строки path — иконка из самого шима",
+                        shim.display()
+                    ));
+                    Some(exe.to_string_lossy().into_owned())
+                }
+            };
+            Some(AppEntry {
+                title,
+                target: exe.to_string_lossy().into_owned(),
+                args: None,
+                icon_source,
+            })
+        })
+        .collect()
+}
+
+/// Строка `path = "..."` из .shim → путь «реального» exe (кавычки снимаются);
+/// нет файла/не читается/нет пути — None.
+fn shim_path_line(shim: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(shim).ok()?;
+    for line in text.lines() {
+        let Some((key, value)) = line.split_once('=') else { continue };
+        if !key.trim().eq_ignore_ascii_case("path") {
+            continue;
+        }
+        let value = value.trim();
+        let unquoted = if value.len() >= 2 && value.starts_with('"') && value.ends_with('"') {
+            &value[1..value.len() - 1]
+        } else {
+            value
+        };
+        if unquoted.is_empty() {
+            return None;
+        }
+        return Some(unquoted.to_string());
+    }
+    None
 }
 
 /// Разобрать один .lnk → AppEntry; None = битый/бесцельный ярлык.
@@ -400,7 +571,7 @@ mod tests {
 
     /// Реальный Start Menu: если каталоги доступны — там есть приложения
     /// (и все записи имеют непустые title/target). Пропуск, если окружение
-    /// без Start Menu.
+    /// без Start Menu. На машине со scoop сюда входят и шимы (после .lnk).
     #[test]
     fn real_start_menu_scan_when_available() {
         let roots = default_app_dirs();
@@ -418,5 +589,166 @@ mod tests {
             assert!(!app.title.is_empty());
             assert!(!app.target.is_empty());
         }
+    }
+
+    /// Fake-scoop: shim.exe + .shim с path = "…real.exe" (в кавычках, как
+    /// пишет scoop; второй — без кавычек) → title=stem, target=шим,
+    /// иконный источник = «реальный» exe; запуск — шимом (LaunchApp).
+    #[test]
+    fn scoop_shim_parses_to_entry_with_real_exe_icon() {
+        let dir = unique_temp_dir("apps-scoop");
+        let real_dir = dir.join("apps").join("bat").join("current");
+        fs::create_dir_all(&real_dir).unwrap();
+        let real = real_dir.join("bat.exe");
+        fs::write(&real, b"MZ").unwrap();
+        fs::write(dir.join("bat.exe"), b"MZ").unwrap();
+        fs::write(dir.join("bat.shim"), format!("path = \"{}\"", real.display())).unwrap();
+        // второй шим: путь без кавычек + лишние строки (env = …)
+        fs::write(dir.join("raw.exe"), b"MZ").unwrap();
+        fs::write(
+            dir.join("raw.shim"),
+            format!("env = x@y\npath = {}\n", real.display()),
+        )
+        .unwrap();
+
+        let apps = scan_scoop_shims(&dir);
+        assert_eq!(apps.len(), 2, "по записи на каждый .exe, без рекурсии");
+        let bat = apps.iter().find(|a| a.title == "bat").expect("запись bat");
+        assert_eq!(bat.target, dir.join("bat.exe").to_string_lossy().as_ref());
+        assert_eq!(bat.icon_source.as_deref(), Some(real.to_string_lossy().as_ref()));
+        assert_eq!(bat.args, None);
+        let raw = apps.iter().find(|a| a.title == "raw").expect("запись raw");
+        assert_eq!(raw.icon_source.as_deref(), Some(real.to_string_lossy().as_ref()));
+
+        // Провайдер: запуск шимом, id — по пути шима (как у .lnk — по target).
+        let provider = AppsProvider::new(apps);
+        let items = provider.query("bat");
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].action,
+            ItemAction::LaunchApp {
+                path: dir.join("bat.exe").to_string_lossy().into_owned(),
+                args: None,
+            }
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Нет .shim или битый (без строки path) → иконный источник = сам шим.
+    #[test]
+    fn scoop_shim_without_or_broken_shim_file_falls_back_to_shim() {
+        let dir = unique_temp_dir("apps-scoop-fallback");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("plain.exe"), b"MZ").unwrap(); // .shim нет
+        fs::write(dir.join("broken.exe"), b"MZ").unwrap();
+        fs::write(dir.join("broken.shim"), "env = x\n").unwrap(); // нет path
+
+        let apps = scan_scoop_shims(&dir);
+        assert_eq!(apps.len(), 2);
+        for app in &apps {
+            let self_path = dir.join(format!("{}.exe", app.title));
+            assert_eq!(
+                app.icon_source.as_deref(),
+                Some(self_path.to_string_lossy().as_ref()),
+                "икона из самого шима: {}",
+                app.title
+            );
+        }
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// ДЕДУП: .lnk на «реальный» exe + шим на тот же exe → шим пропущен (lnk
+    /// побеждает, остаётся имя/иконка ярлыка); шим-алиас из второго корня на
+    /// тот же exe тоже схлопнут; уникальный шим остаётся.
+    #[test]
+    fn scoop_shim_dedup_lnk_wins_and_between_roots() {
+        let dir = unique_temp_dir("apps-scoop-dedup");
+        let programs = dir.join("programs");
+        let shims1 = dir.join("shims1");
+        let shims2 = dir.join("shims2");
+        for d in [&programs, &shims1, &shims2] {
+            fs::create_dir_all(d).unwrap();
+        }
+        let real = dir.join("apps").join("Element").join("current").join("Element.exe");
+        let real_s = real.to_string_lossy().into_owned();
+        // Ярлык Start Menu (GUI-scoop-приложение): target — реальный exe.
+        write_lnk(&programs, "Element.lnk", &real_s, "", "C:\\i\\lnk.dll");
+        // Шим на тот же exe — должен быть пропущен.
+        fs::write(shims1.join("element.exe"), b"MZ").unwrap();
+        fs::write(shims1.join("element.shim"), format!("path = \"{}\"", real_s)).unwrap();
+        // Шим-алиас из второго корня на тот же exe — тоже схлопнут.
+        fs::write(shims2.join("elem2.exe"), b"MZ").unwrap();
+        fs::write(shims2.join("elem2.shim"), format!("path = \"{}\"", real_s)).unwrap();
+        // Уникальный шим — остаётся.
+        let bat_real = dir.join("apps").join("bat").join("current").join("bat.exe");
+        fs::write(shims2.join("bat.exe"), b"MZ").unwrap();
+        fs::write(shims2.join("bat.shim"), format!("path = \"{}\"", bat_real.display())).unwrap();
+
+        let report = scan_full_report(&[programs], &[shims1, shims2]);
+        assert_eq!(report.broken, 0);
+        assert_eq!(report.apps.len(), 2, "Element(lnk) + bat(шим); дубли схлопнуты");
+        assert_eq!(report.apps[0].title, "Element", "lnk побеждает");
+        assert_eq!(report.apps[0].icon_source.as_deref(), Some("C:\\i\\lnk.dll"));
+        assert_eq!(report.apps[1].title, "bat");
+
+        let provider = AppsProvider::new(report.apps);
+        let items = provider.query("element");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, format!("apps:{}", real_s.to_lowercase()));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Маршрутизация scan_apps_report: каталог, не входящий в scoop_shim_dirs
+    /// (tmp-дерево), обрабатывается как .lnk-корень — .exe-шимы там игнорируются.
+    #[test]
+    fn exe_in_non_scoop_root_is_ignored() {
+        let dir = unique_temp_dir("apps-scoop-routing");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("app.exe"), b"MZ").unwrap();
+        fs::write(dir.join("app.shim"), "path = \"C:\\x\\real.exe\"").unwrap();
+        write_lnk(&dir, "App.lnk", "app.exe", "", "");
+
+        let report = scan_apps_report(&[dir.clone()]);
+        assert_eq!(report.apps.len(), 1, "tmp-корень — не scoop: только .lnk");
+        assert_eq!(report.apps[0].title, "App");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Маппинг SCOOP/SCOOP_GLOBAL/USERPROFILE/ProgramData → каталоги шимов
+    /// (чистая функция — без мутации env, параллельные тесты в безопасности).
+    #[test]
+    fn scoop_shim_dirs_env_mapping() {
+        // SCOOP задан → он перекрывает USERPROFILE; глобальный — ProgramData.
+        assert_eq!(
+            scoop_shim_dirs_from(
+                Some(r"C:\scoop".into()),
+                None,
+                Some(r"C:\Users\u".into()),
+                Some(r"C:\ProgramData".into()),
+            ),
+            vec![
+                PathBuf::from(r"C:\scoop\shims"),
+                PathBuf::from(r"C:\ProgramData\scoop\shims"),
+            ]
+        );
+        // SCOOP не задан → USERPROFILE\scoop; SCOOP_GLOBAL задан → он.
+        assert_eq!(
+            scoop_shim_dirs_from(
+                None,
+                Some(r"D:\scoop-global".into()),
+                Some(r"C:\Users\u".into()),
+                None,
+            ),
+            vec![
+                PathBuf::from(r"C:\Users\u\scoop\shims"),
+                PathBuf::from(r"D:\scoop-global\shims"),
+            ]
+        );
+        // Ничего не задано и переменных нет — пусто.
+        assert!(scoop_shim_dirs_from(None, None, None, None).is_empty());
     }
 }

@@ -6,6 +6,7 @@
 
 mod bench;
 mod clipboard;
+mod clipboard_service;
 mod commands;
 mod hotkey;
 mod search_service;
@@ -30,6 +31,8 @@ pub struct AppState {
     pub bench_tx: Option<Sender<u64>>,
     /// Поиск: агрегатор + файлы + иконки + фоновый индексатор (шаг 4 Фазы 2).
     pub search: Arc<search_service::SearchService>,
+    /// Клипборд: listener + история + сниппеты + paste (шаг 3 Фазы 3).
+    pub clipboard: Arc<clipboard_service::ClipboardService>,
 }
 
 fn main() {
@@ -53,6 +56,17 @@ fn main() {
             std::process::id()
         ));
         bench::run_bench_search(n);
+        return;
+    }
+    // `--clipboard-seed N` (шаг 6 Фазы 3): наполнить историю N синтетическими
+    // записями (тексты + 3 PNG) и завершиться — приёмка лимита 1000 записей
+    // без Tauri. Ранний exit как bench-search.
+    if let Some(n) = clipboard_service::parse_clipboard_seed_arg() {
+        logging::info(&format!(
+            "startup pid={} clipboard-seed={n}",
+            std::process::id()
+        ));
+        clipboard_service::run_seed(n);
         return;
     }
     let (bench_tx, bench_rx) = channel::<u64>();
@@ -91,7 +105,15 @@ fn main() {
             commands::run_item,
             commands::get_index_status,
             commands::reindex,
-            commands::hide_window
+            commands::hide_window,
+            commands::clipboard_list,
+            commands::clipboard_paste,
+            commands::clipboard_delete,
+            commands::clipboard_pinned,
+            commands::snippets_list,
+            commands::snippet_create,
+            commands::snippet_update,
+            commands::snippet_delete
         ])
         .setup(move |app| {
             let win = app.get_webview_window("main").expect("main window");
@@ -109,11 +131,15 @@ fn main() {
             // (старт скана и события index://progress — сразу из setup).
             let sink = Arc::new(search_service::TauriSink(app.handle().clone()));
             let search = search_service::SearchService::new(sink);
+            // Клипборд-сервис: listener стартует всегда (дёшево), события
+            // игнорируются при clipboard_enabled=false — тумблер на лету (D7).
+            let clipboard = clipboard_service::ClipboardService::spawn(app.handle().clone(), &settings);
             app.manage(AppState {
                 settings: Mutex::new(settings.clone()),
                 hotkey: hotkey::HotkeyService::new(),
                 bench_tx: bench_n.map(|_| bench_tx),
                 search,
+                clipboard,
             });
 
             // Хоткей из настроек (+ фолбэк при занятом; bench-хоткей при --bench).

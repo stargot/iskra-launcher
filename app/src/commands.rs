@@ -6,9 +6,11 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use iskra_core::ipc::{IndexStatus, SearchError, SearchResponse};
 use iskra_core::logging;
 use iskra_core::{
-    RuntimeInfo, Settings, SettingsError, SettingsPatch, EVENT_SETTINGS_CHANGED,
+    ClipboardEntry, RuntimeInfo, Settings, SettingsError, SettingsPatch, Snippet,
+    EVENT_SETTINGS_CHANGED,
 };
 
+use crate::clipboard_service;
 use crate::tray;
 use crate::AppState;
 
@@ -32,9 +34,21 @@ pub fn search(state: State<'_, AppState>, q: String) -> SearchResponse {
 }
 
 /// Исполнить элемент выдачи: usage++ и ItemAction через iskra-sys/буфер обмена.
+/// D9: сниппеты (id "snippets:N", действие CopyText) вставляются сразу —
+/// активное окно запоминаем ДО копирования (лончер сейчас в фокусе), после
+/// копирования paste_just_copied вернёт фокус и пошлёт Ctrl+V.
 #[tauri::command]
-pub fn run_item(state: State<'_, AppState>, id: String) -> Result<(), SearchError> {
-    state.search.run_item(&id)
+pub fn run_item(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<(), SearchError> {
+    let prev = if id.starts_with("snippets:") {
+        Some(clipboard_service::foreground_hwnd())
+    } else {
+        None
+    };
+    state.search.run_item(&id)?;
+    if let Some(prev) = prev {
+        clipboard_service::paste_just_copied(&app, prev);
+    }
+    Ok(())
 }
 
 /// Последний статус фонового индексатора.
@@ -84,6 +98,9 @@ pub fn update_settings(
     next.save()
         .map_err(|e| SettingsError::Io { message: e.to_string() })?;
     *state.settings.lock().expect("state.settings poisoned") = next.clone();
+    // Ф3 D7: тумблер мониторинга и исключения применяются на лету (listener
+    // жив, события игнорируются) — без рестарта.
+    state.clipboard.apply_settings(&next);
     if let Err(err) = app.emit(EVENT_SETTINGS_CHANGED, &next) {
         logging::warn(&format!("commands: emit settings://changed FAILED: {err}"));
     }
@@ -106,6 +123,118 @@ pub(crate) fn apply_autostart(app: &AppHandle, enable: bool) -> Result<(), Strin
     }
     tray::sync_autostart(app, enable);
     Ok(())
+}
+
+// --- Фаза 3, шаг 3: клипборд + сниппеты (тонкие обёртки; логика — ClipboardService) ---
+
+/// История клипборда: pinned сверху, далее used_at DESC, топ-100 (D8). Ошибка
+/// БД (патология) → пустой список + лог: контракт команды — плоский Vec.
+#[tauri::command]
+pub fn clipboard_list(state: State<'_, AppState>, query: Option<String>) -> Vec<ClipboardEntry> {
+    match state.clipboard.list(query.as_deref()) {
+        Ok(items) => items,
+        Err(e) => {
+            logging::warn(&format!("commands: clipboard_list FAILED: {e}"));
+            Vec::new()
+        }
+    }
+}
+
+/// Вставить запись в активное окно (цепочка D6); лончер скрывает сервис.
+#[tauri::command]
+pub fn clipboard_paste(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: i64,
+) -> Result<(), String> {
+    state.clipboard.paste(&app, id)
+}
+
+/// Удалить запись (+ PNG/thumbnail с диска, D4); событие — в сервисе.
+#[tauri::command]
+pub fn clipboard_delete(app: AppHandle, state: State<'_, AppState>, id: i64) -> bool {
+    let existing = state.clipboard.get(id).ok().flatten();
+    match state.clipboard.delete(id) {
+        Ok(true) => {
+            if let Some(entry) = existing {
+                state.clipboard.emit_updated(&app, &entry);
+            }
+            true
+        }
+        Ok(false) => false,
+        Err(e) => {
+            logging::warn(&format!("commands: clipboard_delete({id}) FAILED: {e}"));
+            false
+        }
+    }
+}
+
+/// Закрепить/открепить (D8); событие — в сервисе.
+#[tauri::command]
+pub fn clipboard_pinned(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: i64,
+    pinned: bool,
+) -> bool {
+    match state.clipboard.set_pinned(id, pinned) {
+        Ok(true) => {
+            if let Ok(Some(entry)) = state.clipboard.get(id) {
+                state.clipboard.emit_updated(&app, &entry);
+            }
+            true
+        }
+        Ok(false) => false,
+        Err(e) => {
+            logging::warn(&format!("commands: clipboard_pinned({id}) FAILED: {e}"));
+            false
+        }
+    }
+}
+
+// --- сниппеты (D9): CRUD в настройках; вставка из поиска — run_item ---
+
+#[tauri::command]
+pub fn snippets_list(state: State<'_, AppState>) -> Vec<Snippet> {
+    match state.clipboard.snippets_list() {
+        Ok(items) => items,
+        Err(e) => {
+            logging::warn(&format!("commands: snippets_list FAILED: {e}"));
+            Vec::new()
+        }
+    }
+}
+
+#[tauri::command]
+pub fn snippet_create(
+    state: State<'_, AppState>,
+    name: String,
+    body: String,
+    keywords: String,
+) -> Result<Snippet, String> {
+    state.clipboard.snippet_create(&name, &body, &keywords).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn snippet_update(
+    state: State<'_, AppState>,
+    id: i64,
+    name: String,
+    body: String,
+    keywords: String,
+) -> Result<bool, String> {
+    state.clipboard.snippet_update(id, &name, &body, &keywords).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn snippet_delete(state: State<'_, AppState>, id: i64) -> bool {
+    match state.clipboard.snippet_delete(id) {
+        Ok(deleted) => deleted,
+        Err(e) => {
+            logging::warn(&format!("commands: snippet_delete({id}) FAILED: {e}"));
+            false
+        }
+    }
 }
 
 /// Переключение автозапуска из трея: полный цикл — реестр, settings.json, событие.

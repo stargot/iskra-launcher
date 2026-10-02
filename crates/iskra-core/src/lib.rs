@@ -3,13 +3,17 @@
 //! от Tauri и WinAPI — быстро тестируется, переиспользуется фазой 2 (плагины).
 //! Реализация — шаг 3 Фазы 1 (docs/plans/2026-09-29-phase1-implementation.md).
 
+pub mod clipboard;
 pub mod ipc;
 pub mod logging;
 pub mod search;
 pub mod settings;
+pub mod snippets;
 
+pub use clipboard::{AddOutcome, ClipboardEntry, ClipboardKind, ClipboardNew, ClipboardStore};
 pub use ipc::{
-    HotkeyChanged, RuntimeInfo, SettingsError, EVENT_HOTKEY_CHANGED, EVENT_NAV_SETTINGS,
-    EVENT_SETTINGS_CHANGED,
+    HotkeyChanged, RuntimeInfo, SettingsError, EVENT_CLIPBOARD_UPDATED, EVENT_HOTKEY_CHANGED,
+    EVENT_NAV_SETTINGS, EVENT_SETTINGS_CHANGED,
 };
 pub use settings::{Settings, SettingsPatch, Theme};
+pub use snippets::{Snippet, SnippetStore, SnippetsProvider};

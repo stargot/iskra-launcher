@@ -21,6 +21,8 @@ import type { IndexStatus, SearchItem } from "../ipc/types";
 
 interface Props {
   onOpenSettings: () => void;
+  /** Открыть экран клипборда (кнопка в searchbar или команда в поиске, D8). */
+  onOpenClipboard: () => void;
 }
 
 const DEBOUNCE_MS = 50;
@@ -89,7 +91,7 @@ const ResultRow = memo(function ResultRow({ item, selected, onSelect, onRun }: R
   );
 });
 
-export default function ResultList({ onOpenSettings }: Props) {
+export default function ResultList({ onOpenSettings, onOpenClipboard }: Props) {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<SearchItem[]>([]);
   const [selected, setSelected] = useState(0);
@@ -204,6 +206,12 @@ export default function ResultList({ onOpenSettings }: Props) {
     };
   }, [runSearch]);
 
+  // --- Команда «клипборд» (D8): точное совпадение запроса открывает экран ---
+  useEffect(() => {
+    const q = query.trim().toLowerCase();
+    if (q === "клипборд" || q === "clipboard") onOpenClipboard();
+  }, [query, onOpenClipboard]);
+
   // --- Действия ---
   const runSelected = useCallback((item: SearchItem | undefined) => {
     if (!item) return;
@@ -279,6 +287,14 @@ export default function ResultList({ onOpenSettings }: Props) {
           spellCheck={false}
           aria-label="Поиск"
         />
+        <button
+          className="icon-btn"
+          title="Клипборд (или введите «клипборд»)"
+          aria-label="Клипборд"
+          onClick={onOpenClipboard}
+        >
+          📋
+        </button>
         <button className="icon-btn" title="Настройки" aria-label="Настройки" onClick={onOpenSettings}>
           ⚙
         </button>

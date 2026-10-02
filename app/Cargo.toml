@@ -14,12 +14,16 @@ serde_json = { workspace = true }
 
 # Шаг 4 Фазы 2: запись в буфер обмена (ItemAction::CopyText) на стороне app —
 # iskra-sys по условию шага не расширялся. Только WinAPI-фичи для clipboard.rs.
+# Шаг 3 Фазы 3: + WindowsAndMessaging (foreground save/restore для paste, D6);
+# + image (thumbnails 128px и --clipboard-seed PNG-заглушки, D4/шаг 6).
 windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_System_DataExchange",
     "Win32_System_Memory",
     "Win32_System_Ole",
+    "Win32_UI_WindowsAndMessaging",
 ] }
+image = { workspace = true }
 
 [build-dependencies]
 tauri-build = { workspace = true }

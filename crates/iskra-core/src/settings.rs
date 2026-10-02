@@ -29,6 +29,12 @@ pub struct Settings {
     pub theme: Theme,
     pub hotkey: String,
     pub autostart: bool,
+    /// Ф3 D7: мониторинг клипборда включён (сервис живёт, но игнорирует события
+    /// при false — применяется на лету). serde default → старый settings.json
+    /// без полей читается без ошибок.
+    pub clipboard_enabled: bool,
+    /// Ф3 D7: исключённые приложения (process names, lowercase); пусто — все пишутся.
+    pub clipboard_excluded_apps: Vec<String>,
 }
 
 impl Default for Settings {
@@ -37,6 +43,8 @@ impl Default for Settings {
             theme: Theme::Dark,
             hotkey: "Alt+Space".to_string(),
             autostart: false,
+            clipboard_enabled: true,
+            clipboard_excluded_apps: Vec::new(),
         }
     }
 }
@@ -48,6 +56,8 @@ pub struct SettingsPatch {
     pub theme: Option<Theme>,
     pub hotkey: Option<String>,
     pub autostart: Option<bool>,
+    pub clipboard_enabled: Option<bool>,
+    pub clipboard_excluded_apps: Option<Vec<String>>,
 }
 
 impl Settings {
@@ -62,6 +72,12 @@ impl Settings {
         }
         if let Some(autostart) = patch.autostart {
             next.autostart = autostart;
+        }
+        if let Some(clipboard_enabled) = patch.clipboard_enabled {
+            next.clipboard_enabled = clipboard_enabled;
+        }
+        if let Some(apps) = &patch.clipboard_excluded_apps {
+            next.clipboard_excluded_apps = apps.clone();
         }
         next
     }
@@ -162,6 +178,72 @@ mod tests {
         assert_eq!(s.theme, Theme::Dark);
         assert_eq!(s.hotkey, "Alt+Space");
         assert!(!s.autostart);
+        // Ф3 D7: дефолты клипборда — включён, исключений нет
+        assert!(s.clipboard_enabled);
+        assert!(s.clipboard_excluded_apps.is_empty());
+    }
+
+    /// Ф3 D7: СТАРЫЙ settings.json (до клипборд-полей) читается без ошибок,
+    /// недостающие поля берутся из defaults, повторное сохранение — полный круг.
+    #[test]
+    fn old_settings_json_without_clipboard_fields_roundtrips() {
+        let dir = temp_dir("old-json");
+        let path = dir.join("settings.json");
+        std::fs::create_dir_all(&dir).unwrap();
+        // дословный формат времён фазы 2 (без clipboard*)
+        std::fs::write(
+            &path,
+            r#"{
+  "theme": "light",
+  "hotkey": "Ctrl+Alt+K",
+  "autostart": true
+}"#,
+        )
+        .unwrap();
+
+        let loaded = Settings::load_from(&path);
+        assert_eq!(loaded.theme, Theme::Light);
+        assert_eq!(loaded.hotkey, "Ctrl+Alt+K");
+        assert!(loaded.autostart);
+        assert!(loaded.clipboard_enabled, "дефолт D7: включён");
+        assert!(loaded.clipboard_excluded_apps.is_empty(), "дефолт D7: пусто");
+
+        // сохранение → чтение: поля появились, старые не потерялись
+        loaded.save_to(&path).unwrap();
+        let reloaded = Settings::load_from(&path);
+        assert_eq!(reloaded, loaded);
+        let raw = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            raw.contains(r#""clipboardEnabled": true"#)
+                && raw.contains(r#""clipboardExcludedApps": []"#),
+            "новые поля в camelCase, старые не потерялись: {raw}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Ф3 D7: новые поля сериализуются в camelCase и патчатся по отдельности.
+    #[test]
+    fn clipboard_fields_roundtrip_and_patch() {
+        let mut s = Settings::default();
+        s.clipboard_enabled = false;
+        s.clipboard_excluded_apps = vec!["notepad.exe".to_string(), "1password.exe".to_string()];
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(
+            json.contains(r#""clipboardEnabled":false"#)
+                && json.contains(r#""clipboardExcludedApps":["notepad.exe"#),
+            "имена полей — camelCase: {json}"
+        );
+        let back: Settings = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, s);
+
+        let patched = Settings::default().patched(&SettingsPatch {
+            clipboard_enabled: Some(false),
+            clipboard_excluded_apps: Some(vec!["mstsc.exe".to_string()]),
+            ..Default::default()
+        });
+        assert!(!patched.clipboard_enabled);
+        assert_eq!(patched.clipboard_excluded_apps, vec!["mstsc.exe".to_string()]);
+        assert_eq!(patched.hotkey, "Alt+Space", "None-поля патча не меняют настройки");
     }
 
     #[test]

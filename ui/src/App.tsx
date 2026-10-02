@@ -1,13 +1,16 @@
-// Iskra UI (шаг 5): два «экрана» — список | настройки (простой state, без роутера).
-// Тема применяется к <html data-theme> мгновенно и синхронизируется событием
-// settings://changed (изменения могут приходить и из трея).
-import { useEffect, useState } from "react";
+// Iskra UI (шаг 5 Фазы 1 + Фаза 3): три «экрана» — список | настройки |
+// клипборд (простой state, без роутера). Тема применяется к <html data-theme>
+// мгновенно и синхронизируется событием settings://changed (изменения могут
+// приходить и из трея). Esc на настройках/клипборде — назад к списку (НЕ
+// hide_window: скрытие лончера на экране клипборда делает только paste).
+import { useCallback, useEffect, useState } from "react";
+import ClipboardView from "./components/ClipboardView";
 import ResultList from "./components/ResultList";
 import SettingsView from "./components/SettingsView";
 import { getSettings, onNavSettings, onSettingsChanged } from "./ipc/client";
 import type { Settings } from "./ipc/types";
 
-type Screen = "launcher" | "settings";
+type Screen = "launcher" | "settings" | "clipboard";
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("launcher");
@@ -42,17 +45,23 @@ export default function App() {
     document.documentElement.dataset.theme = settings?.theme ?? "dark";
   }, [settings]);
 
-  // Esc на настройках — назад к списку.
+  // Esc на втором экране — назад к списку (скрытие окна — только hide_window
+  // из ResultList; paste на клипборде скрывает окно сам — сервис).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && screen === "settings") setScreen("launcher");
+      if (e.key === "Escape" && screen !== "launcher") setScreen("launcher");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [screen]);
 
+  const openClipboard = useCallback(() => setScreen("clipboard"), []);
+
   if (screen === "settings" && settings) {
     return <SettingsView settings={settings} onBack={() => setScreen("launcher")} />;
   }
-  return <ResultList onOpenSettings={() => setScreen("settings")} />;
+  if (screen === "clipboard") {
+    return <ClipboardView onBack={() => setScreen("launcher")} />;
+  }
+  return <ResultList onOpenSettings={() => setScreen("settings")} onOpenClipboard={openClipboard} />;
 }

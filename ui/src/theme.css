@@ -433,3 +433,211 @@ input[type="text"]:focus {
   font-size: 12px;
   font-weight: 600;
 }
+
+/* --- Фаза 3: textarea (исключения клипборда, тело сниппета) --- */
+
+textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--control-bg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-inner);
+  padding: 6px 10px;
+  outline: none;
+  user-select: text;
+  resize: vertical;
+  min-height: 32px;
+  transition:
+    border-color 0.12s ease,
+    background-color 0.12s ease;
+}
+
+textarea:focus {
+  border-color: var(--accent);
+  background: var(--surface-strong);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+}
+
+button:disabled:hover {
+  background: var(--control-bg);
+}
+
+/* --- Фаза 3, шаг 4: экран клипборда --- */
+
+.clipboard {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 10px;
+  gap: 8px;
+}
+
+.clipboard .topbar .search-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 30px;
+  font-size: 15px;
+  background: transparent;
+  border: none;
+  padding: 4px 2px;
+}
+
+.clip-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.clip-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.clip-list::-webkit-scrollbar-thumb {
+  background: var(--surface-strong);
+  border-radius: 4px;
+}
+
+.clip-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.clip-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: var(--radius-inner);
+  cursor: pointer;
+  transition: background-color 0.08s ease;
+}
+
+.clip-row:hover {
+  background: var(--hover);
+}
+
+.clip-row.selected {
+  background: var(--surface-strong);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.clip-icon {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-strong);
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+/* Thumbnail изображения (D4): конверт со скруглением, концентричный иконке. */
+.clip-thumb {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid var(--surface-strong);
+  background: var(--surface);
+}
+
+.clip-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Текст записи: ровно 2 строки с ellipsis (D8). */
+.clip-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+  user-select: text;
+}
+
+.clip-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Чипы имён файлов (files-записи, D8). */
+.clip-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 40px;
+  overflow: hidden;
+}
+
+.clip-chip {
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  white-space: nowrap;
+}
+
+/* Действия строки — проявляются на hover/выделении (не мешают скану глазом). */
+.clip-actions {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.clip-row:hover .clip-actions,
+.clip-row.selected .clip-actions {
+  opacity: 1;
+}
+
+.clip-actions button {
+  min-width: 26px;
+  min-height: 26px;
+  padding: 0 6px;
+  font-size: 12px;
+  border-radius: 6px;
+  box-shadow: none;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.clip-actions button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.clip-actions button.active {
+  color: var(--accent);
+}
+
+/* --- Фаза 3, шаг 5: сниппеты в настройках --- */
+
+.snippet-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--surface-strong);
+  border-radius: var(--radius-inner);
+}

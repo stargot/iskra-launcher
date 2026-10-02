@@ -26,6 +26,10 @@ pub const EVENT_INDEX_PROGRESS: &str = "index://progress";
 /// подставить иконки; сам сервис больше НИЧЕГО не пере-эмитит (см. D8 —
 /// все эмиты списков идут только через search/run-путь с валидным qid).
 pub const EVENT_ICONS_UPDATED: &str = "icons://updated";
+/// После изменения клипборд-истории (новая запись/дедуп-подъём/удаление/pin):
+/// payload — затронутый `ClipboardEntry` (для удаления id может не существовать —
+/// UI просто перезапрашивает `clipboard_list`). Ф3, шаг 3 (сервис app).
+pub const EVENT_CLIPBOARD_UPDATED: &str = "clipboard://updated";
 
 // --- Типы команд и событий ---
 //
@@ -37,12 +41,29 @@ pub const EVENT_ICONS_UPDATED: &str = "icons://updated";
 // - `run_item(id: string) -> Result<(), SearchError>` — usage++ и исполнение ItemAction;
 // - `get_index_status() -> IndexStatus` — последний прогресс индексатора;
 // - `reindex() -> ()` — полный рескан в фоновом воркере;
-// - `hide_window() -> ()` — скрыть окно лончера (Esc в UI); минорное расширение
+//   - `hide_window() -> ()` — скрыть окно лончера (Esc в UI); минорное расширение
 //   контракта шага 4, согласовано в задаче шага 5.
+// Фаза 3, шаг 3 (тонкие обёртки — app/src/commands.rs; сервис — clipboard_service.rs;
+// D3–D9):
+// - `clipboard_list(query: Option<string>) -> Vec<ClipboardEntry>` — список (pinned
+//   сверху, далее used_at DESC), поиск по превью с normalize_name;
+// - `clipboard_paste(id: number) -> Result<(), ...>` — вставка в активное окно:
+//   цепочка D6 (foreground save → скрыть лончер → контент в клипборд → restore
+//   → SendInput Ctrl+V); запись после вставки получает used_at/used_count++;
+// - `clipboard_delete(id: number) -> bool` — удалить запись (+ PNG-файлы, D4);
+// - `clipboard_pin(id: number, pinned: bool) -> bool` — закрепить/открепить (D8);
+// - `snippets_list() -> Vec<Snippet>`, `snippet_create(name, body, keywords) -> Snippet`,
+//   `snippet_update(id, name, body, keywords) -> bool`, `snippet_delete(id) -> bool`
+//   (D9: CRUD в настройках; вставка из поиска — через run_item, действие CopyText).
+// Мониторинг: settings.clipboard_enabled + clipboard_excluded_apps (D7); событие —
+// EVENT_CLIPBOARD_UPDATED.
 
 /// Пере-экспорт типов поиска: контракт выдачи живёт в search/types.rs,
 /// но зеркало UI (ui/src/ipc/types.ts) описывает его рядом с остальным ipc.
 pub use crate::search::types::{ItemAction, SearchItem, SystemCommand};
+/// Пере-экспорт типов клипборда/сниппетов (Ф3, шаг 1): контракт в clipboard.rs/snippets.rs.
+pub use crate::clipboard::{ClipboardEntry, ClipboardKind};
+pub use crate::snippets::Snippet;
 
 /// Команда `get_settings() -> Settings` (тип из settings.rs, общий с конфигом).
 /// Команда `update_settings(patch: SettingsPatch) -> Result<Settings, SettingsError>`.
@@ -306,5 +327,92 @@ mod tests {
         assert_eq!(IndexPhase::from(P::Indexing), IndexPhase::Indexing);
         assert_eq!(IndexPhase::from(P::Cleaning), IndexPhase::Cleaning);
         assert_eq!(IndexPhase::from(P::Done), IndexPhase::Done);
+    }
+
+    // --- Фаза 3, шаг 1: roundtrip-тесты клипборда/сниппетов ---
+
+    /// ClipboardEntry: все поля — camelCase (imagePath/contentHash/sourceApp/…);
+    /// content у image — null, у files — JSON-массив путей.
+    #[test]
+    fn clipboard_entry_roundtrip_camel_case() {
+        let e = ClipboardEntry {
+            id: 7,
+            kind: ClipboardKind::Image,
+            content: None,
+            image_path: Some(r"C:\Users\I\AppData\Roaming\iskra\clipboard\7.png".to_string()),
+            preview: "[изображение 1920×1080]".to_string(),
+            pinned: true,
+            source_app: Some("snipaste.exe".to_string()),
+            content_hash: "0123456789abcdef".to_string(),
+            created_at: 1_700_000_000_000,
+            used_at: 1_700_000_050_000,
+            used_count: 3,
+        };
+        let json = serde_json::to_string(&e).unwrap();
+        assert!(
+            json.contains(r#""imagePath":"C:\\Users"#)
+                && json.contains(r#""contentHash":"0123456789abcdef""#)
+                && json.contains(r#""sourceApp":"snipaste.exe""#)
+                && json.contains(r#""usedCount":3"#)
+                && json.contains(r#""createdAt":1700000000000"#)
+                && json.contains(r#""content":null"#)
+                && json.contains(r#""kind":"image""#),
+            "camelCase и lower-case kind: {json}"
+        );
+        let back: ClipboardEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, e);
+    }
+
+    /// Виды записей — нижним регистром: "text" | "image" | "files"; files-entry
+    /// с content-массивом тоже ходит по IPC (mirror ui/src/ipc/types.ts).
+    #[test]
+    fn clipboard_kind_values_and_files_entry_roundtrip() {
+        assert_eq!(serde_json::to_string(&ClipboardKind::Text).unwrap(), r#""text""#);
+        assert_eq!(serde_json::to_string(&ClipboardKind::Image).unwrap(), r#""image""#);
+        assert_eq!(serde_json::to_string(&ClipboardKind::Files).unwrap(), r#""files""#);
+
+        let e = ClipboardEntry {
+            id: 3,
+            kind: ClipboardKind::Files,
+            content: Some(r#"["C:\\a.txt","C:\\б б.png"]"#.to_string()),
+            image_path: None,
+            preview: "a.txt, б б.png".to_string(),
+            pinned: false,
+            source_app: Some("explorer.exe".to_string()),
+            content_hash: "ff00ff00ff00ff00".to_string(),
+            created_at: 1,
+            used_at: 2,
+            used_count: 1,
+        };
+        let json = serde_json::to_string(&e).unwrap();
+        assert!(json.contains(r#""kind":"files""#) && json.contains(r#""imagePath":null"#));
+        let back: ClipboardEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, e);
+        assert_eq!(back.files(), vec![r"C:\a.txt", r"C:\б б.png"]);
+    }
+
+    /// Snippet: camelCase (createdAt); файл-сниппет с пустыми keywords.
+    #[test]
+    fn snippet_roundtrip_camel_case() {
+        let s = Snippet {
+            id: 5,
+            name: "Адрес".to_string(),
+            body: "ул. Ленина, 1".to_string(),
+            keywords: "адрес почта".to_string(),
+            created_at: 1_700_000_000_000,
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(
+            json.contains(r#""name":"Адрес""#) && json.contains(r#""createdAt":1700000000000"#),
+            "camelCase: {json}"
+        );
+        let back: Snippet = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, s);
+    }
+
+    /// Имя канала клипборда — контракт с ui/src/ipc/client.ts (фиксируем тестом).
+    #[test]
+    fn clipboard_event_name_is_stable_contract() {
+        assert_eq!(EVENT_CLIPBOARD_UPDATED, "clipboard://updated");
     }
 }

@@ -1,14 +1,17 @@
 //! iskra-sys — безопасные обёртки windows-rs (ADR 7): единственное место в workspace
 //! с `unsafe`/WinAPI. Без Tauri. Реализации — шаг 2 Фазы 1
-//! (docs/plans/2026-09-29-phase1-implementation.md) и шаг 3 Фазы 2
-//! (docs/plans/2026-09-30-phase2-implementation.md): shell/иконки/питание.
+//! (docs/plans/2026-09-29-phase1-implementation.md), шаг 3 Фазы 2
+//! (docs/plans/2026-09-30-phase2-implementation.md): shell/иконки/питание
+//! и шаг 2 Фазы 3 (docs/plans/2026-09-30-phase3-implementation.md): клипборд/SendInput.
 
 pub mod autostart;
+pub mod clipboard;
 pub mod fullscreen;
 pub mod icons;
 pub mod keys;
 pub mod monitor;
 pub mod power;
+pub mod sendinput;
 pub mod shell;
 
 #[cfg(test)]

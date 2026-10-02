@@ -10,6 +10,8 @@ use std::time::{Duration, SystemTime};
 // --- приоритеты провайдеров ---
 pub const PRIORITY_APPS: i64 = 100;
 pub const PRIORITY_CALC: i64 = 90;
+/// Ф3 D9: сниппеты в поиске — между calc и settings.
+pub const PRIORITY_SNIPPETS: i64 = 85;
 pub const PRIORITY_SETTINGS: i64 = 80;
 pub const PRIORITY_SYSTEM: i64 = 70;
 pub const PRIORITY_FILES: i64 = 50;

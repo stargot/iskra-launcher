@@ -9,6 +9,10 @@ export interface Settings {
   theme: Theme;
   hotkey: string;
   autostart: boolean;
+  /** Ф3 D7: мониторинг клипборда включён (применяется на лету). */
+  clipboardEnabled: boolean;
+  /** Ф3 D7: исключённые приложения (process names, lowercase). */
+  clipboardExcludedApps: string[];
 }
 
 /** crates/iskra-core/src/settings.rs::SettingsPatch — отсутствующее поле = «не менять». */
@@ -16,6 +20,8 @@ export interface SettingsPatch {
   theme?: Theme;
   hotkey?: string;
   autostart?: boolean;
+  clipboardEnabled?: boolean;
+  clipboardExcludedApps?: string[];
 }
 
 /** Payload события hotkey://changed: фактический хоткей после remap/фолбэка. */
@@ -92,3 +98,36 @@ export const EVENT_NAV_SETTINGS = "nav://settings";
 export const EVENT_SEARCH_UPDATED = "search://updated";
 export const EVENT_INDEX_PROGRESS = "index://progress";
 export const EVENT_ICONS_UPDATED = "icons://updated";
+export const EVENT_CLIPBOARD_UPDATED = "clipboard://updated";
+
+// --- Фаза 3, шаг 3: клипборд + сниппеты (зеркало clipboard.rs/snippets.rs) ---
+
+/** clipboard.rs::ClipboardKind (serde lowercase). */
+export type ClipboardKind = "text" | "image" | "files";
+
+/** clipboard.rs::ClipboardEntry — запись истории (camelCase). */
+export interface ClipboardEntry {
+  id: number;
+  kind: ClipboardKind;
+  /** text: полный текст; files: JSON-массив путей; image: null (D4). */
+  content: string | null;
+  /** Путь к PNG на диске; только image (D4). Thumbnail — рядом, *_thumb.png. */
+  imagePath: string | null;
+  /** Строка для списка/поиска (≤ 200 символов). */
+  preview: string;
+  pinned: boolean;
+  sourceApp: string | null;
+  contentHash: string;
+  createdAt: number;
+  usedAt: number;
+  usedCount: number;
+}
+
+/** snippets.rs::Snippet (camelCase). */
+export interface Snippet {
+  id: number;
+  name: string;
+  body: string;
+  keywords: string;
+  createdAt: number;
+}

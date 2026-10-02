@@ -13,6 +13,9 @@ windows = { workspace = true, features = [
     "Win32_System_DataExchange",
     "Win32_System_Memory",
     "Win32_System_Ole",
+    # + шаг 2 Фазы 3 (клипборд): GetModuleHandleW для WNDCLASSW.hInstance
+    # (RegisterClassW окна слушателя, D1).
+    "Win32_System_LibraryLoader",
     # + мониторы и реестр (шаг 2):
     "Win32_Graphics_Gdi",
     "Win32_System_Registry",

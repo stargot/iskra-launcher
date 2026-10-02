@@ -138,6 +138,13 @@ impl Db {
         Ok(Db { conn: Mutex::new(conn) })
     }
 
+    /// Прямой доступ к соединению под мьютексом — для репозиториев поверх общей
+    /// БД (Ф3, шаг 1: clipboard.rs/snippets.rs; SQL живёт в них, Db даёт только
+    /// соединение: транзакциям нужен `&mut Connection`, guard его отдаёт).
+    pub fn conn(&self) -> MutexGuard<'_, Connection> {
+        self.lock()
+    }
+
     /// Прогнать миграции на готовом соединении (для тестов шага 0/2 и отладки).
     pub fn migrate_on(conn: &mut Connection) -> Result<usize> {
         let report = embedded::migrations::runner().run(conn)?;
@@ -426,7 +433,7 @@ mod tests {
         // 1) прямой прогон runner на файловом соединении: ровно 2 миграции.
         let mut conn = Connection::open(&db_path).unwrap();
         let applied = Db::migrate_on(&mut conn).unwrap();
-        assert_eq!(applied, 2, "V1__baseline + V2__search_index");
+        assert_eq!(applied, 3, "V1__baseline + V2__search_index + V3__clipboard");
         drop(conn);
 
         // 2) открытие через Db::open: таблицы есть, WAL включён.

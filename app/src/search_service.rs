@@ -46,6 +46,7 @@ use iskra_core::search::{
     FilesProvider, ItemAction, SearchItem, SearchProvider, SettingsProvider, SystemCommand,
     SystemProvider, UsageStore, WebProvider,
 };
+use iskra_core::SnippetsProvider;
 use iskra_sys::{icons, power, shell};
 
 use crate::clipboard;
@@ -226,6 +227,9 @@ impl SearchService {
         let agg = Arc::new(Aggregator::new(vec![
             Arc::new(AppsProvider::new(paths.apps)),
             Arc::new(CalcProvider),
+            // D9 (Ф3): сниппеты в общем поиске — name/keywords/body, CopyText
+            // (+ автопастер цепочкой D6 в commands::run_item).
+            Arc::new(SnippetsProvider::new(db.clone())),
             Arc::new(SettingsProvider),
             Arc::new(SystemProvider),
             Arc::new(WebProvider::default()),
