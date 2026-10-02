@@ -149,17 +149,22 @@ fn se_err(op: &str, code: isize) -> io::Error {
 mod tests {
     use super::*;
 
-    /// Done-критерий шага 3: ShellExecuteW открывает notepad.exe.
-    /// Тест сам завершает запущенный им процесс — по хэндлу от ShellExecuteExW
-    /// (повторный OpenProcess по PID упакованного Notepad невозможен, шапка модуля).
+    /// Done-критерий шага 3: ShellExecuteW запускает процесс, terminate()
+    /// по хэндлу от SEE_MASK_NOCLOSEPROCESS его завершает. Жертва — cmd.exe
+    /// по абсолютному пути с /k: живёт до terminate, не зависит от PATH
+    /// (в PATH впереди System32 может стоять GNU timeout из Git) и от
+    /// упакованных приложений (Notepad активируется через стаб, стаб сразу
+    /// выходит — хэндл оказывается хэндлом мёртвого процесса).
     #[test]
-    fn launch_opens_notepad_and_kills_it() {
-        let proc = launch_process("notepad.exe", "").expect("notepad.exe должен запуститься");
-        assert!(proc.pid() != 0, "PID запущенного notepad.exe должен быть ненулевым");
+    fn launch_opens_process_and_kills_it() {
+        let proc = launch_process(
+            r"C:\Windows\System32\cmd.exe",
+            "/k echo iskra-launch-test-victim",
+        )
+        .expect("cmd.exe должен запуститься");
+        assert!(proc.pid() != 0, "PID запущенного cmd.exe должен быть ненулевым");
 
-        // Дать упакованному Notepad (Win11) завершить активацию: terminate
-        // в окне активации может быть отклонён с ACCESS_DENIED.
-        std::thread::sleep(std::time::Duration::from_millis(2000));
+        std::thread::sleep(std::time::Duration::from_millis(500));
 
         // Ретраи: TerminateProcess по хэндлу от ShellExecuteExW — единственный
         // надёжный способ для упакованных приложений (шапка модуля).
@@ -177,7 +182,7 @@ mod tests {
             }
         }
         if let Some(e) = last {
-            panic!("запущенный notepad.exe (pid {}) должен завершаться: {e}", proc.pid());
+            panic!("запущенный cmd.exe (pid {}) должен завершаться: {e}", proc.pid());
         }
     }
 
