@@ -15,5 +15,5 @@ pub use ipc::{
     HotkeyChanged, RuntimeInfo, SettingsError, EVENT_CLIPBOARD_UPDATED, EVENT_HOTKEY_CHANGED,
     EVENT_NAV_SETTINGS, EVENT_SETTINGS_CHANGED,
 };
-pub use settings::{Settings, SettingsPatch, Theme};
+pub use settings::{Settings, SettingsPatch, Theme, WindowMode};
 pub use snippets::{Snippet, SnippetStore, SnippetsProvider};

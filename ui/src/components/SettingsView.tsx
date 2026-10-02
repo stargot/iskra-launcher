@@ -14,7 +14,7 @@ import {
   snippetUpdate,
   updateSettings,
 } from "../ipc/client";
-import type { RuntimeInfo, Settings, SettingsError, Snippet, Theme } from "../ipc/types";
+import type { RuntimeInfo, Settings, SettingsError, Snippet, Theme, WindowMode } from "../ipc/types";
 
 interface Props {
   settings: Settings;
@@ -184,6 +184,15 @@ export default function SettingsView({ settings, onBack }: Props) {
     updateSettings({ theme }).catch((err) => setError(describeError(err as SettingsError)));
   };
 
+  // Размер окна: применяется сразу (update_settings → apply_mode на лету, D2).
+  const changeWindowMode = (mode: WindowMode) => {
+    if (mode === settings.windowMode) return;
+    setError(null);
+    updateSettings({ windowMode: mode }).catch((err) =>
+      setError(describeError(err as SettingsError)),
+    );
+  };
+
   const saveHotkey = async () => {
     setError(null);
     setNotice(null);
@@ -283,6 +292,35 @@ export default function SettingsView({ settings, onBack }: Props) {
               Светлая
             </button>
           </div>
+        </section>
+
+        <section className="card">
+          <span className="card-title">Размер окна</span>
+          <div className="segmented" role="group" aria-label="Размер окна">
+            <button
+              className={settings.windowMode === "normal" ? "active" : ""}
+              onClick={() => changeWindowMode("normal")}
+            >
+              Обычный
+            </button>
+            <button
+              className={settings.windowMode === "double" ? "active" : ""}
+              onClick={() => changeWindowMode("double")}
+            >
+              2×
+            </button>
+            <button
+              className={settings.windowMode === "fullscreen" ? "active" : ""}
+              onClick={() => changeWindowMode("fullscreen")}
+            >
+              На весь экран
+            </button>
+          </div>
+          <span className="inline-note">
+            Применяется сразу и переживает перезапуск. 2× сжимается, если не
+            влезает в экран. В fullscreen лончер по-прежнему скрывается при
+            клике мимо (повторный хоткей возвращает).
+          </span>
         </section>
 
         <section className="card">

@@ -22,6 +22,25 @@ impl Default for Theme {
     }
 }
 
+/// Режим размера окна лончера (прогон 1 D1). В JSON — нижним регистром:
+/// "normal" | "double" | "fullscreen". Применение — app/src/window.rs::apply_mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WindowMode {
+    /// Обычный: 720×480 (синхронно с tauri.conf.json).
+    Normal,
+    /// Двойной: 1440×960 с клампом в work area монитора.
+    Double,
+    /// На весь экран (hide-on-blur сохраняется — D4).
+    Fullscreen,
+}
+
+impl Default for WindowMode {
+    fn default() -> Self {
+        WindowMode::Normal
+    }
+}
+
 /// Настройки приложения. camelCase в JSON (контракт IPC, план шага 3).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -35,6 +54,9 @@ pub struct Settings {
     pub clipboard_enabled: bool,
     /// Ф3 D7: исключённые приложения (process names, lowercase); пусто — все пишутся.
     pub clipboard_excluded_apps: Vec<String>,
+    /// Прогон 1 D1: режим размера окна. serde default → старый settings.json
+    /// без windowMode читается без ошибок (дефолт Normal = сегодняшние 720×480).
+    pub window_mode: WindowMode,
 }
 
 impl Default for Settings {
@@ -45,6 +67,7 @@ impl Default for Settings {
             autostart: false,
             clipboard_enabled: true,
             clipboard_excluded_apps: Vec::new(),
+            window_mode: WindowMode::Normal,
         }
     }
 }
@@ -58,6 +81,7 @@ pub struct SettingsPatch {
     pub autostart: Option<bool>,
     pub clipboard_enabled: Option<bool>,
     pub clipboard_excluded_apps: Option<Vec<String>>,
+    pub window_mode: Option<WindowMode>,
 }
 
 impl Settings {
@@ -78,6 +102,9 @@ impl Settings {
         }
         if let Some(apps) = &patch.clipboard_excluded_apps {
             next.clipboard_excluded_apps = apps.clone();
+        }
+        if let Some(mode) = patch.window_mode {
+            next.window_mode = mode;
         }
         next
     }
@@ -181,6 +208,8 @@ mod tests {
         // Ф3 D7: дефолты клипборда — включён, исключений нет
         assert!(s.clipboard_enabled);
         assert!(s.clipboard_excluded_apps.is_empty());
+        // Прогон 1 D1: дефолт режима окна — normal (720×480)
+        assert_eq!(s.window_mode, WindowMode::Normal);
     }
 
     /// Ф3 D7: СТАРЫЙ settings.json (до клипборд-полей) читается без ошибок,
@@ -219,6 +248,71 @@ mod tests {
             "новые поля в camelCase, старые не потерялись: {raw}"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Прогон 1 D1: СТАРЫЙ settings.json (до windowMode) читается без ошибок,
+    /// дефолт normal проставляется, save/load — полный круг, в JSON "windowMode".
+    #[test]
+    fn old_settings_json_without_window_mode_roundtrips() {
+        let dir = temp_dir("window-mode-old-json");
+        let path = dir.join("settings.json");
+        std::fs::create_dir_all(&dir).unwrap();
+        // дословный формат времён фазы 3 (без windowMode)
+        std::fs::write(
+            &path,
+            r#"{
+  "theme": "light",
+  "hotkey": "Ctrl+Alt+K",
+  "autostart": true
+}"#,
+        )
+        .unwrap();
+
+        let loaded = Settings::load_from(&path);
+        assert_eq!(loaded.window_mode, WindowMode::Normal, "дефолт D1: normal");
+
+        // сохранение → поле появилось в camelCase/lowercase → читается обратно
+        loaded.save_to(&path).unwrap();
+        let raw = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            raw.contains(r#""windowMode": "normal""#),
+            "windowMode в JSON, serde lowercase: {raw}"
+        );
+        let reloaded = Settings::load_from(&path);
+        assert_eq!(reloaded, loaded);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Прогон 1 D1: все варианты WindowMode — lowercase в JSON, полный круг;
+    /// патч применяется точечно (None-поля не трогают остальное).
+    #[test]
+    fn window_mode_values_roundtrip_and_patch() {
+        for (mode, tag) in [
+            (WindowMode::Normal, "normal"),
+            (WindowMode::Double, "double"),
+            (WindowMode::Fullscreen, "fullscreen"),
+        ] {
+            let mut s = Settings::default();
+            s.window_mode = mode;
+            let json = serde_json::to_string(&s).unwrap();
+            assert!(
+                json.contains(&format!(r#""windowMode":"{tag}""#)),
+                "serde lowercase {tag}: {json}"
+            );
+            let back: Settings = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, s);
+        }
+
+        let patched = Settings::default().patched(&SettingsPatch {
+            window_mode: Some(WindowMode::Double),
+            ..Default::default()
+        });
+        assert_eq!(patched.window_mode, WindowMode::Double);
+        assert_eq!(
+            patched.hotkey,
+            "Alt+Space",
+            "None-поля патча не меняют настройки"
+        );
     }
 
     /// Ф3 D7: новые поля сериализуются в camelCase и патчатся по отдельности.

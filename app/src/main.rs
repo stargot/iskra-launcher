@@ -126,6 +126,11 @@ fn main() {
                 Err(e) => logging::warn(&format!("mica: FAILED: {e}")),
             }
 
+            // Режим размера окна (прогон 1 D2/D3): после mica, до хоткеев. Окно
+            // ещё скрыто — set_size/set_fullscreen работают и на скрытом окне;
+            // ошибки apply_mode логируются, старт не зависит от них.
+            window::apply_mode(&win, settings.window_mode);
+
             // Состояние ДО регистрации хоткеев (обработчик читает AppState).
             // SearchService: БД + провайдеры + иконки + фоновый индекс-воркер
             // (старт скана и события index://progress — сразу из setup).

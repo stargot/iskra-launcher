@@ -12,6 +12,7 @@ use iskra_core::{
 
 use crate::clipboard_service;
 use crate::tray;
+use crate::window;
 use crate::AppState;
 
 #[tauri::command]
@@ -101,6 +102,14 @@ pub fn update_settings(
     // Ф3 D7: тумблер мониторинга и исключения применяются на лету (listener
     // жив, события игнорируются) — без рестарта.
     state.clipboard.apply_settings(&next);
+    // Прогон 1 D2: режим окна применяется после успешного save. Ошибка
+    // применения — лог, НЕ Err: настройка уже сохранена (команда не падает,
+    // режим доедет при следующем старте).
+    if patch.window_mode.is_some() {
+        if let Some(win) = app.get_webview_window("main") {
+            window::apply_mode(&win, next.window_mode);
+        }
+    }
     if let Err(err) = app.emit(EVENT_SETTINGS_CHANGED, &next) {
         logging::warn(&format!("commands: emit settings://changed FAILED: {err}"));
     }

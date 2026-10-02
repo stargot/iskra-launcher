@@ -33,26 +33,40 @@ pub fn foreground_monitor_rect() -> Option<Rect> {
         let mut pt = POINT::default();
         if GetCursorPos(&mut pt).is_ok() {
             let hmon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-            if let Some(rect) = rect_from_hmonitor(hmon) {
+            if let Some(rect) = rect_from_hmonitor(hmon, false) {
                 return Some(rect);
             }
         }
-        rect_from_hmonitor(MonitorFromPoint(POINT::default(), MONITOR_DEFAULTTOPRIMARY))
+        rect_from_hmonitor(MonitorFromPoint(POINT::default(), MONITOR_DEFAULTTOPRIMARY), false)
     }
 }
 
-/// Rect монитора, ближайшего к окну (физические px). NULL hwnd → None.
+/// Rect монитора, ближайшего к окну (физические px, полный rcMonitor). NULL hwnd → None.
 pub fn monitor_rect_from_hwnd(hwnd: HWND) -> Option<Rect> {
     if hwnd.0.is_null() {
         return None;
     }
     unsafe {
         let hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-        rect_from_hmonitor(hmon)
+        rect_from_hmonitor(hmon, false)
     }
 }
 
-fn rect_from_hmonitor(hmon: HMONITOR) -> Option<Rect> {
+/// Work area (rcWork, без таскбара) монитора, ближайшего к окну — для клампа
+/// размеров окна (прогон 1 D3: 2× не должен накрывать панель задач). NULL hwnd → None.
+pub fn monitor_work_rect_from_hwnd(hwnd: HWND) -> Option<Rect> {
+    if hwnd.0.is_null() {
+        return None;
+    }
+    unsafe {
+        let hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        rect_from_hmonitor(hmon, true)
+    }
+}
+
+/// rect_from_hmonitor: work=false → rcMonitor (весь монитор), work=true → rcWork
+/// (монитор минус таскбар и закреплённые панели — MONITORINFO отдаёт оба сразу).
+fn rect_from_hmonitor(hmon: HMONITOR, work: bool) -> Option<Rect> {
     if hmon.0.is_null() {
         return None;
     }
@@ -64,11 +78,12 @@ fn rect_from_hmonitor(hmon: HMONITOR) -> Option<Rect> {
     };
     unsafe {
         if GetMonitorInfoW(hmon, &mut info).as_bool() {
+            let rc = if work { info.rcWork } else { info.rcMonitor };
             Some(Rect {
-                x: info.rcMonitor.left,
-                y: info.rcMonitor.top,
-                width: info.rcMonitor.right - info.rcMonitor.left,
-                height: info.rcMonitor.bottom - info.rcMonitor.top,
+                x: rc.left,
+                y: rc.top,
+                width: rc.right - rc.left,
+                height: rc.bottom - rc.top,
             })
         } else {
             None

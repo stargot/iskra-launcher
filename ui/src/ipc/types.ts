@@ -4,6 +4,9 @@
 
 export type Theme = "dark" | "light";
 
+/** crates/iskra-core/src/settings.rs::WindowMode (serde lowercase). */
+export type WindowMode = "normal" | "double" | "fullscreen";
+
 /** crates/iskra-core/src/settings.rs::Settings */
 export interface Settings {
   theme: Theme;
@@ -13,6 +16,8 @@ export interface Settings {
   clipboardEnabled: boolean;
   /** Ф3 D7: исключённые приложения (process names, lowercase). */
   clipboardExcludedApps: string[];
+  /** Прогон 1 D1: режим размера окна (normal=720×480, double=2×, fullscreen). */
+  windowMode: WindowMode;
 }
 
 /** crates/iskra-core/src/settings.rs::SettingsPatch — отсутствующее поле = «не менять». */
@@ -22,6 +27,7 @@ export interface SettingsPatch {
   autostart?: boolean;
   clipboardEnabled?: boolean;
   clipboardExcludedApps?: string[];
+  windowMode?: WindowMode;
 }
 
 /** Payload события hotkey://changed: фактический хоткей после remap/фолбэка. */
