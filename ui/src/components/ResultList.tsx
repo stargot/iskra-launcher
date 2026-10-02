@@ -23,6 +23,8 @@ interface Props {
   onOpenSettings: () => void;
   /** Открыть экран клипборда (кнопка в searchbar или команда в поиске, D8). */
   onOpenClipboard: () => void;
+  /** Открыть экран сниппетов (кнопка в searchbar или команда в поиске, D6). */
+  onOpenSnippets: () => void;
 }
 
 const DEBOUNCE_MS = 50;
@@ -91,7 +93,7 @@ const ResultRow = memo(function ResultRow({ item, selected, onSelect, onRun }: R
   );
 });
 
-export default function ResultList({ onOpenSettings, onOpenClipboard }: Props) {
+export default function ResultList({ onOpenSettings, onOpenClipboard, onOpenSnippets }: Props) {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<SearchItem[]>([]);
   const [selected, setSelected] = useState(0);
@@ -206,11 +208,12 @@ export default function ResultList({ onOpenSettings, onOpenClipboard }: Props) {
     };
   }, [runSearch]);
 
-  // --- Команда «клипборд» (D8): точное совпадение запроса открывает экран ---
+  // --- Команды «клипборд»/«сниппеты» (D8/D6): точное совпадение открывает экран ---
   useEffect(() => {
     const q = query.trim().toLowerCase();
     if (q === "клипборд" || q === "clipboard") onOpenClipboard();
-  }, [query, onOpenClipboard]);
+    else if (q === "сниппеты" || q === "snippets") onOpenSnippets();
+  }, [query, onOpenClipboard, onOpenSnippets]);
 
   // --- Действия ---
   const runSelected = useCallback((item: SearchItem | undefined) => {
@@ -294,6 +297,14 @@ export default function ResultList({ onOpenSettings, onOpenClipboard }: Props) {
           onClick={onOpenClipboard}
         >
           📋
+        </button>
+        <button
+          className="icon-btn"
+          title="Сниппеты (или введите «сниппеты»)"
+          aria-label="Сниппеты"
+          onClick={onOpenSnippets}
+        >
+          📝
         </button>
         <button className="icon-btn" title="Настройки" aria-label="Настройки" onClick={onOpenSettings}>
           ⚙

@@ -2,19 +2,11 @@
 // HotkeyBusy → инлайн-ошибка + фактический хоткей из get_runtime_info),
 // автозапуск (checkbox, состояние из Settings).
 // Фаза 3, шаг 5: секция «Клипборд» — toggle мониторинга (сразу через
-// update_settings, D7) и исключения (textarea, по process name на строку);
-// секция «Сниппеты» — CRUD (имя/тело/keywords, D9; вставка из поиска — run_item).
-import { useCallback, useEffect, useState } from "react";
-import {
-  getRuntimeInfo,
-  onHotkeyChanged,
-  snippetCreate,
-  snippetDelete,
-  snippetsList,
-  snippetUpdate,
-  updateSettings,
-} from "../ipc/client";
-import type { RuntimeInfo, Settings, SettingsError, Snippet, Theme, WindowMode } from "../ipc/types";
+// update_settings, D7) и исключения (textarea, по process name на строку).
+// Прогон 2 (D7): CRUD сниппетов переехал на экран SnippetsView.
+import { useEffect, useState } from "react";
+import { getRuntimeInfo, onHotkeyChanged, updateSettings } from "../ipc/client";
+import type { RuntimeInfo, Settings, SettingsError, Theme, WindowMode } from "../ipc/types";
 
 interface Props {
   settings: Settings;
@@ -37,87 +29,6 @@ function isSettingsError(err: unknown): err is SettingsError {
   );
 }
 
-/** Строка сниппета: локальный черновик, Сохранить активна только при изменениях. */
-function SnippetRow({
-  snippet,
-  onSaved,
-  onError,
-  onNotice,
-}: {
-  snippet: Snippet;
-  onSaved: () => void;
-  onError: (message: string) => void;
-  onNotice: (message: string) => void;
-}) {
-  const [name, setName] = useState(snippet.name);
-  const [body, setBody] = useState(snippet.body);
-  const [keywords, setKeywords] = useState(snippet.keywords);
-  const dirty = name !== snippet.name || body !== snippet.body || keywords !== snippet.keywords;
-
-  const save = async () => {
-    try {
-      await snippetUpdate(snippet.id, name, body, keywords);
-      onNotice(`Сниппет «${name.trim()}» сохранён.`);
-      onSaved();
-    } catch (err) {
-      onError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
-  const remove = async () => {
-    try {
-      await snippetDelete(snippet.id);
-      onNotice(`Сниппет «${snippet.name}» удалён.`);
-      onSaved();
-    } catch (err) {
-      onError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
-  return (
-    <div className="snippet-row">
-      <div className="row">
-        <input
-          className="grow"
-          type="text"
-          value={name}
-          placeholder="Имя (например, Адрес)"
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && dirty) void save();
-          }}
-          spellCheck={false}
-          aria-label="Имя сниппета"
-        />
-        <input
-          type="text"
-          value={keywords}
-          placeholder="Ключевые слова"
-          onChange={(e) => setKeywords(e.target.value)}
-          spellCheck={false}
-          aria-label="Ключевые слова сниппета"
-        />
-      </div>
-      <textarea
-        rows={2}
-        value={body}
-        placeholder="Тело сниппета — вставится как есть"
-        onChange={(e) => setBody(e.target.value)}
-        spellCheck={false}
-        aria-label="Тело сниппета"
-      />
-      <div className="row">
-        <button className="primary" disabled={!dirty} onClick={() => void save()}>
-          Сохранить
-        </button>
-        <button title="Удалить сниппет" onClick={() => void remove()}>
-          Удалить
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function SettingsView({ settings, onBack }: Props) {
   const [hotkeyDraft, setHotkeyDraft] = useState(settings.hotkey);
   const [runtime, setRuntime] = useState<RuntimeInfo | null>(null);
@@ -127,11 +38,6 @@ export default function SettingsView({ settings, onBack }: Props) {
   const [exclusionsDraft, setExclusionsDraft] = useState(
     settings.clipboardExcludedApps.join("\n"),
   );
-  // Сниппеты: список + форма добавления.
-  const [snippets, setSnippets] = useState<Snippet[]>([]);
-  const [newName, setNewName] = useState("");
-  const [newBody, setNewBody] = useState("");
-  const [newKeywords, setNewKeywords] = useState("");
 
   // Фактический хоткей + отслеживание фолбэка.
   useEffect(() => {
@@ -168,16 +74,6 @@ export default function SettingsView({ settings, onBack }: Props) {
   useEffect(() => {
     setExclusionsDraft(settings.clipboardExcludedApps.join("\n"));
   }, [settings.clipboardExcludedApps]);
-
-  const reloadSnippets = useCallback(() => {
-    snippetsList()
-      .then(setSnippets)
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    reloadSnippets();
-  }, [reloadSnippets]);
 
   const changeTheme = (theme: Theme) => {
     if (theme === settings.theme) return;
@@ -247,21 +143,6 @@ export default function SettingsView({ settings, onBack }: Props) {
     } catch (err) {
       if (isSettingsError(err)) setError(describeError(err));
       else setError(String(err));
-    }
-  };
-
-  const addSnippet = async () => {
-    setError(null);
-    setNotice(null);
-    try {
-      const created = await snippetCreate(newName, newBody, newKeywords);
-      setNewName("");
-      setNewBody("");
-      setNewKeywords("");
-      setNotice(`Сниппет «${created.name}» добавлен — найдите его в поиске по имени.`);
-      reloadSnippets();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -398,64 +279,6 @@ export default function SettingsView({ settings, onBack }: Props) {
             Копирование из исключённых приложений в историю не попадает (регистр
             и «.exe» не важны).
           </span>
-        </section>
-
-        <section className="card">
-          <span className="card-title">Сниппеты</span>
-          <span className="inline-note">
-            Находятся в поиске по имени/ключевым словам; Enter — копирует тело и
-            сразу вставляет в активное окно.
-          </span>
-          {snippets.length === 0 && (
-            <span className="inline-note">Сниппетов пока нет — добавьте первый ниже.</span>
-          )}
-          {snippets.map((s) => (
-            <SnippetRow
-              key={s.id}
-              snippet={s}
-              onSaved={reloadSnippets}
-              onError={setError}
-              onNotice={setNotice}
-            />
-          ))}
-          <div className="snippet-row">
-            <div className="row">
-              <input
-                className="grow"
-                type="text"
-                value={newName}
-                placeholder="Имя нового сниппета"
-                onChange={(e) => setNewName(e.target.value)}
-                spellCheck={false}
-                aria-label="Имя нового сниппета"
-              />
-              <input
-                type="text"
-                value={newKeywords}
-                placeholder="Ключевые слова"
-                onChange={(e) => setNewKeywords(e.target.value)}
-                spellCheck={false}
-                aria-label="Ключевые слова нового сниппета"
-              />
-            </div>
-            <textarea
-              rows={2}
-              value={newBody}
-              placeholder="Тело нового сниппета"
-              onChange={(e) => setNewBody(e.target.value)}
-              spellCheck={false}
-              aria-label="Тело нового сниппета"
-            />
-            <div className="row">
-              <button
-                className="primary"
-                disabled={!newName.trim() || !newBody.trim()}
-                onClick={() => void addSnippet()}
-              >
-                Добавить
-              </button>
-            </div>
-          </div>
         </section>
       </div>
     </main>

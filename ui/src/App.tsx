@@ -1,16 +1,17 @@
-// Iskra UI (шаг 5 Фазы 1 + Фаза 3): три «экрана» — список | настройки |
-// клипборд (простой state, без роутера). Тема применяется к <html data-theme>
+// Iskra UI (шаг 5 Фазы 1 + Фаза 3 + прогон 2): четыре «экрана» — список |
+// настройки | клипборд | сниппеты (простой state, без роутера). Тема применяется к <html data-theme>
 // мгновенно и синхронизируется событием settings://changed (изменения могут
 // приходить и из трея). Esc на настройках/клипборде — назад к списку (НЕ
 // hide_window: скрытие лончера на экране клипборда делает только paste).
 import { useCallback, useEffect, useState } from "react";
 import ClipboardView from "./components/ClipboardView";
 import ResultList from "./components/ResultList";
+import SnippetsView from "./components/SnippetsView";
 import SettingsView from "./components/SettingsView";
 import { getSettings, onNavSettings, onSettingsChanged } from "./ipc/client";
 import type { Settings } from "./ipc/types";
 
-type Screen = "launcher" | "settings" | "clipboard";
+type Screen = "launcher" | "settings" | "clipboard" | "snippets";
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("launcher");
@@ -56,6 +57,7 @@ export default function App() {
   }, [screen]);
 
   const openClipboard = useCallback(() => setScreen("clipboard"), []);
+  const openSnippets = useCallback(() => setScreen("snippets"), []);
 
   if (screen === "settings" && settings) {
     return <SettingsView settings={settings} onBack={() => setScreen("launcher")} />;
@@ -63,5 +65,14 @@ export default function App() {
   if (screen === "clipboard") {
     return <ClipboardView onBack={() => setScreen("launcher")} />;
   }
-  return <ResultList onOpenSettings={() => setScreen("settings")} onOpenClipboard={openClipboard} />;
+  if (screen === "snippets") {
+    return <SnippetsView onBack={() => setScreen("launcher")} />;
+  }
+  return (
+    <ResultList
+      onOpenSettings={() => setScreen("settings")}
+      onOpenClipboard={openClipboard}
+      onOpenSnippets={openSnippets}
+    />
+  );
 }
