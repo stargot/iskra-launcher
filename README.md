@@ -55,12 +55,17 @@ Iskra запоминает всё, что вы копируете: текст, �
 
 ## Установка
 
-Готовых сборок пока нет — проект собирается из исходников:
-
-1. Установите [Rust](https://rustup.rs) (MSVC) и [Node.js](https://nodejs.org) ≥ 20.19.
-2. Выполните `build.cmd` — получите `target\release\iskra.exe`.
+1. Скачайте архив со страницы [Releases](https://github.com/stargot/iskra-launcher/releases/latest)
+   и распакуйте в любую папку.
+2. Запустите `iskra.exe` — он свернётся в трей.
+3. `Alt+Space` — вызвать, `Esc` — спрятать.
 
 Нужен Windows 11 (компонент WebView2 уже входит в его состав).
+
+### Сборка из исходников
+
+Понадобятся [Rust](https://rustup.rs) (MSVC) и [Node.js](https://nodejs.org) ≥ 20.19.
+Команда `build.cmd` соберёт `target\release\iskra.exe`.
 
 ## Данные
 
